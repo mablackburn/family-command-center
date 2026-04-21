@@ -21,12 +21,13 @@ const firebaseConfig = {
   appId: "1:412577698703:web:76544d2967f6bd540fb1fa"
 };
 
-const app = initializeApp(typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : firebaseConfig);
+// Exclusively use YOUR config to bypass the preview window's sandbox entirely
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const appId = typeof __app_id !== 'undefined' && __app_id ? String(__app_id).replace(/\//g, '-') : 'family-command-center';
-const SHARED_DOC_PATH = `artifacts/${appId}/public/data/appData/sharedKidsData`;
+// Simple, clean path for your personal database
+const SHARED_DOC_PATH = 'commandCenter/familyData';
 
 // --- HELPER ---
 const getTodayStr = () => {
@@ -140,12 +141,10 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        // Connect to your personal Firebase
+        await signInAnonymously(auth);
       } catch (error: any) {
+        // If Anonymous auth isn't enabled in your console yet, proceed anyway using Test Mode rules
         setUser({ uid: 'local-test-user' } as User);
       }
     };
