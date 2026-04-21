@@ -1,8 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Calendar, CheckCircle, ListTodo, ChevronLeft, Lock, Star, AlertCircle } from 'lucide-react';
 
+// --- TYPES ---
+type Chore = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
+type ChoreType = 'daily' | 'weekly';
+
+type Kid = {
+  id: number;
+  name: string;
+  color: string;
+  headerColor: string;
+  pin: string;
+  daily: Chore[];
+  weekly: Chore[];
+  routines: string[];
+};
+
 // --- MOCK DATA ---
-const initialKids = [
+const initialKids: Kid[] = [
   {
     id: 1,
     name: 'Alex',
@@ -65,14 +85,20 @@ const initialKids = [
   }
 ];
 
-const mockReminders = [
+const mockReminders: string[] = [
   "🎸 Taylor: Bring Cello",
   "⚽ Jordan: Wear Soccer Cleats",
   "📚 Library Books due tomorrow!",
   "🍕 Pizza night tonight!"
 ];
 
-const mockCalendar = [
+type CalendarEvent = {
+  day: string;
+  time: string;
+  title: string;
+};
+
+const mockCalendar: CalendarEvent[] = [
   { day: 'Mon', time: '3:30 PM', title: 'Dentist - Alex' },
   { day: 'Tue', time: '4:00 PM', title: 'Soccer Practice' },
   { day: 'Wed', time: '5:00 PM', title: 'Piano Lessons' },
@@ -80,16 +106,22 @@ const mockCalendar = [
 ];
 
 export default function App() {
-  const [view, setView] = useState('dashboard'); // 'dashboard' or 'kids'
-  const [kids, setKids] = useState(initialKids);
+  const [view, setView] = useState<'dashboard' | 'kids'>('dashboard');
+  const [kids, setKids] = useState<Kid[]>(initialKids);
   
   // PIN Modal State
-  const [pinModal, setPinModal] = useState({ isOpen: false, kidId: null, choreId: null, choreType: null });
-  const [enteredPin, setEnteredPin] = useState('');
-  const [pinError, setPinError] = useState(false);
+  const [pinModal, setPinModal] = useState<{
+    isOpen: boolean;
+    kidId: number | null;
+    choreId: string | null;
+    choreType: ChoreType | null;
+  }>({ isOpen: false, kidId: null, choreId: null, choreType: null });
+  
+  const [enteredPin, setEnteredPin] = useState<string>('');
+  const [pinError, setPinError] = useState<boolean>(false);
 
   // --- CALCULATIONS ---
-  const calculateProgress = (type) => {
+  const calculateProgress = (type: ChoreType) => {
     let total = 0;
     let done = 0;
     kids.forEach(kid => {
@@ -105,14 +137,14 @@ export default function App() {
   const weeklyProgress = calculateProgress('weekly');
 
   // --- HANDLERS ---
-  const handleChoreClick = (kidId, choreId, choreType, isDone) => {
+  const handleChoreClick = (kidId: number, choreId: string, choreType: ChoreType, isDone: boolean) => {
     if (isDone) return; // Already done, ignore
     setPinModal({ isOpen: true, kidId, choreId, choreType });
     setEnteredPin('');
     setPinError(false);
   };
 
-  const handlePinPadClick = (num) => {
+  const handlePinPadClick = (num: string) => {
     if (enteredPin.length < 4) {
       const newPin = enteredPin + num;
       setEnteredPin(newPin);
@@ -125,16 +157,24 @@ export default function App() {
     }
   };
 
-  const verifyPin = (pinToTest) => {
+  const verifyPin = (pinToTest: string) => {
     const kid = kids.find(k => k.id === pinModal.kidId);
+    if (!kid || !pinModal.choreType) return; // TypeScript safety checks
+    
     if (kid.pin === pinToTest) {
       // Success! Update chore status
       const updatedKids = kids.map(k => {
         if (k.id === kid.id) {
-          const updatedChores = k[pinModal.choreType].map(c => 
+          const type = pinModal.choreType as ChoreType;
+          const updatedChores = k[type].map(c => 
             c.id === pinModal.choreId ? { ...c, done: true } : c
           );
-          return { ...k, [pinModal.choreType]: updatedChores };
+          
+          if (type === 'daily') {
+             return { ...k, daily: updatedChores };
+          } else {
+             return { ...k, weekly: updatedChores };
+          }
         }
         return k;
       });
@@ -150,7 +190,14 @@ export default function App() {
   };
 
   // --- COMPONENTS ---
-  const ProgressRing = ({ progress, label, colorClass, strokeColor }) => {
+  type ProgressRingProps = {
+    progress: number;
+    label: string;
+    colorClass: string;
+    strokeColor: string;
+  };
+
+  const ProgressRing = ({ progress, label, colorClass, strokeColor }: ProgressRingProps) => {
     const radius = 60;
     const circumference = 2 * Math.PI * radius;
     const strokeDashoffset = circumference - (progress / 100) * circumference;
