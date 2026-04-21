@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, CheckCircle, ListTodo, ChevronLeft, Lock, Star, AlertCircle, Settings, Users, RotateCcw, X, Plus, Edit3, Save, CheckSquare, CloudSun, ArrowUp, ArrowDown, LayoutDashboard, ChevronUp, ChevronDown } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, type User } from 'firebase/auth';
@@ -656,7 +656,7 @@ export default function App() {
     );
   };
 
-  const layoutMap: Record<string, () => JSX.Element> = {
+  const layoutMap: Record<string, () => React.ReactNode> = {
     'calendar': renderCalendarWidget,
     'reminders': renderRemindersWidget,
     'chores': renderChoresWidget
