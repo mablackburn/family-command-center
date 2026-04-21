@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Calendar, CheckCircle, ListTodo, ChevronLeft, Lock, Star, AlertCircle } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, type User } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 // --- GLOBALS FOR CANVAS COMPATIBILITY ---
