@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Calendar, CheckCircle, ListTodo, ChevronLeft, Lock, Star, AlertCircle, Settings, Users, RotateCcw, X, Plus, Edit3, Save, CheckSquare } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, type User } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, type User } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 // --- GLOBALS FOR CANVAS COMPATIBILITY ---
@@ -130,7 +130,7 @@ export default function App() {
 
   const [enteredAdminPin, setEnteredAdminPin] = useState<string>('');
   const [adminPinError, setAdminPinError] = useState<boolean>(false);
-  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [longPressTimer, setLongPressTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const [editingKid, setEditingKid] = useState<Kid | null>(null);
   const [newItemText, setNewItemText] = useState({ routine: '', reminder: '' });
