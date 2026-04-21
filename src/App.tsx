@@ -1,5 +1,35 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Calendar, CheckCircle, ListTodo, ChevronLeft, Lock, Star, AlertCircle } from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, User } from 'firebase/auth';
+import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
+
+// --- GLOBALS FOR CANVAS COMPATIBILITY ---
+declare global {
+  var __firebase_config: string | undefined;
+  var __app_id: string | undefined;
+  var __initial_auth_token: string | undefined;
+}
+
+// --- FIREBASE INITIALIZATION ---
+// This uses your custom keys when hosted on Vercel
+const userFirebaseConfig = {
+  apiKey: "AIzaSyC_8F-_ya3cVuvUjDA3vFN7yEuPSBOmkxI",
+  authDomain: "family-command-center-549d2.firebaseapp.com",
+  projectId: "family-command-center-549d2",
+  storageBucket: "family-command-center-549d2.firebasestorage.app",
+  messagingSenderId: "412577698703",
+  appId: "1:412577698703:web:76544d2967f6bd540fb1fa"
+};
+
+const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config 
+  ? JSON.parse(__firebase_config) 
+  : userFirebaseConfig;
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const currentAppId = typeof __app_id !== 'undefined' && __app_id ? __app_id : 'family-command-center';
 
 // --- TYPES ---
 type Chore = {
@@ -21,66 +51,42 @@ type Kid = {
   routines: string[];
 };
 
-// --- MOCK DATA ---
+// --- DEFAULT DATA (Loaded if database is empty) ---
 const initialKids: Kid[] = [
   {
-    id: 1,
-    name: 'Alex',
-    color: 'border-blue-500',
-    headerColor: 'text-blue-400',
-    pin: '1234',
+    id: 1, name: 'Alex', color: 'border-blue-500', headerColor: 'text-blue-400', pin: '1234',
     daily: [
       { id: 'd1', text: 'Load Dishwasher', done: false },
       { id: 'd2', text: 'Wipe Counters', done: false },
     ],
-    weekly: [
-      { id: 'w1', text: 'Take out Trash', done: false },
-    ],
+    weekly: [{ id: 'w1', text: 'Take out Trash', done: false }],
     routines: ['Brush Teeth', 'Pack Backpack', 'Read 20 mins']
   },
   {
-    id: 2,
-    name: 'Jordan',
-    color: 'border-green-500',
-    headerColor: 'text-green-400',
-    pin: '1234',
+    id: 2, name: 'Jordan', color: 'border-green-500', headerColor: 'text-green-400', pin: '1234',
     daily: [
       { id: 'd3', text: 'Feed the Dog', done: false },
       { id: 'd4', text: 'Clear Dinner Table', done: false },
     ],
-    weekly: [
-      { id: 'w2', text: 'Clean Downstairs Bath', done: false },
-    ],
+    weekly: [{ id: 'w2', text: 'Clean Downstairs Bath', done: false }],
     routines: ['Brush Teeth', 'Pack Backpack', 'Practice Piano']
   },
   {
-    id: 3,
-    name: 'Taylor',
-    color: 'border-purple-500',
-    headerColor: 'text-purple-400',
-    pin: '1234',
+    id: 3, name: 'Taylor', color: 'border-purple-500', headerColor: 'text-purple-400', pin: '1234',
     daily: [
       { id: 'd5', text: 'Empty Trash Cans', done: false },
       { id: 'd6', text: 'Sweep Kitchen', done: false },
     ],
-    weekly: [
-      { id: 'w3', text: 'Vacuum Stairs', done: false },
-    ],
+    weekly: [{ id: 'w3', text: 'Vacuum Stairs', done: false }],
     routines: ['Brush Teeth', 'Pack Backpack', 'Lay out clothes']
   },
   {
-    id: 4,
-    name: 'Casey',
-    color: 'border-orange-500',
-    headerColor: 'text-orange-400',
-    pin: '1234',
+    id: 4, name: 'Casey', color: 'border-orange-500', headerColor: 'text-orange-400', pin: '1234',
     daily: [
       { id: 'd7', text: 'Pick up Living Room', done: false },
-      { id: 'd8', text: 'Water Plants', done: true }, // One done for example
+      { id: 'd8', text: 'Water Plants', done: false },
     ],
-    weekly: [
-      { id: 'w4', text: 'Dust Bookshelves', done: false },
-    ],
+    weekly: [{ id: 'w4', text: 'Dust Bookshelves', done: false }],
     routines: ['Brush Teeth', 'Pack Backpack', 'Put shoes away']
   }
 ];
@@ -92,11 +98,7 @@ const mockReminders: string[] = [
   "🍕 Pizza night tonight!"
 ];
 
-type CalendarEvent = {
-  day: string;
-  time: string;
-  title: string;
-};
+type CalendarEvent = { day: string; time: string; title: string; };
 
 const mockCalendar: CalendarEvent[] = [
   { day: 'Mon', time: '3:30 PM', title: 'Dentist - Alex' },
@@ -108,17 +110,56 @@ const mockCalendar: CalendarEvent[] = [
 export default function App() {
   const [view, setView] = useState<'dashboard' | 'kids'>('dashboard');
   const [kids, setKids] = useState<Kid[]>(initialKids);
+  const [user, setUser] = useState<User | null>(null);
   
   // PIN Modal State
   const [pinModal, setPinModal] = useState<{
-    isOpen: boolean;
-    kidId: number | null;
-    choreId: string | null;
-    choreType: ChoreType | null;
+    isOpen: boolean; kidId: number | null; choreId: string | null; choreType: ChoreType | null;
   }>({ isOpen: false, kidId: null, choreId: null, choreType: null });
   
   const [enteredPin, setEnteredPin] = useState<string>('');
   const [pinError, setPinError] = useState<boolean>(false);
+
+  // --- DATABASE SYNC LOGIC ---
+  useEffect(() => {
+    // 1. Authenticate silently in the background
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Firebase auth error:", error);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // 2. Fetch the data once authenticated
+    if (!user) return;
+
+    // Use a shared data path so all family devices see the same document
+    const sharedDocRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'sharedKidsData');
+    
+    const unsubscribe = onSnapshot(sharedDocRef, (snapshot) => {
+      if (snapshot.exists() && snapshot.data().kids) {
+        // Data exists! Load it onto the screen
+        setKids(snapshot.data().kids as Kid[]);
+      } else {
+        // First time opening the app! Save our defaults to the database
+        setDoc(sharedDocRef, { kids: initialKids });
+      }
+    }, (error) => {
+      console.error("Firestore snapshot error:", error);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   // --- CALCULATIONS ---
   const calculateProgress = (type: ChoreType) => {
@@ -157,12 +198,12 @@ export default function App() {
     }
   };
 
-  const verifyPin = (pinToTest: string) => {
+  const verifyPin = async (pinToTest: string) => {
     const kid = kids.find(k => k.id === pinModal.kidId);
-    if (!kid || !pinModal.choreType) return; // TypeScript safety checks
+    if (!kid || !pinModal.choreType) return; 
     
     if (kid.pin === pinToTest) {
-      // Success! Update chore status
+      // Success! Mark it as done locally
       const updatedKids = kids.map(k => {
         if (k.id === kid.id) {
           const type = pinModal.choreType as ChoreType;
@@ -178,14 +219,22 @@ export default function App() {
         }
         return k;
       });
+      
+      // Update screen instantly
       setKids(updatedKids);
+      
+      // Save the change to Google's servers securely
+      if (user) {
+        const sharedDocRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'sharedKidsData');
+        await setDoc(sharedDocRef, { kids: updatedKids }, { merge: true });
+      }
       
       // Close modal
       setTimeout(() => setPinModal({ isOpen: false, kidId: null, choreId: null, choreType: null }), 300);
     } else {
       // Fail!
       setPinError(true);
-      setTimeout(() => setEnteredPin(''), 500); // Clear after a moment
+      setTimeout(() => setEnteredPin(''), 500);
     }
   };
 
