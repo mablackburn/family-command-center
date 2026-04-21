@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, CheckCircle, ListTodo, ChevronLeft, Lock, Star, AlertCircle, Settings, Users, RotateCcw, X, Plus, Edit3, Save, CheckSquare } from 'lucide-react';
+import { Calendar, CheckCircle, ListTodo, ChevronLeft, Lock, Star, AlertCircle, Settings, Users, RotateCcw, X, Plus, Edit3, Save, CheckSquare, CloudSun, ArrowUp, ArrowDown, LayoutDashboard, ChevronUp, ChevronDown } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, type User } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
@@ -21,18 +21,23 @@ const firebaseConfig = {
   appId: "1:412577698703:web:76544d2967f6bd540fb1fa"
 };
 
-// Exclusively use YOUR config to bypass the preview window's sandbox entirely
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-
-// Simple, clean path for your personal database
 const SHARED_DOC_PATH = 'commandCenter/familyData';
 
 // --- HELPER ---
 const getTodayStr = () => {
   const d = new Date();
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+};
+
+const DAYS_OF_WEEK = ['Su', 'M', 'T', 'W', 'Th', 'F', 'Sa'];
+
+const WIDGET_TITLES: Record<string, string> = {
+  'calendar': 'Weekly Calendar',
+  'reminders': 'Today (Weather & Reminders)',
+  'chores': 'Individual Chore Progress'
 };
 
 // --- TYPES ---
@@ -42,8 +47,14 @@ type Chore = {
   id: string;
   text: string;
   type: ChoreType;
-  assigneeId: number;
-  done: boolean;
+  assigneeIds: number[]; 
+  completedBy: number[]; 
+};
+
+type Reminder = {
+  id: string;
+  text: string;
+  days: number[]; 
 };
 
 type Kid = {
@@ -53,33 +64,34 @@ type Kid = {
   headerColor: string;
   pin: string;
   routines: string[];
-  reminders: string[]; // E.g. "Tuesday: Bring Piano Books"
+  reminders: Reminder[]; 
 };
 
 type AppSettings = {
   autoResetDailies: boolean;
   lastResetDate: string;
+  zipCode: string; // Used for city name search
+  dashboardLayout: string[];
 };
 
-// --- DEFAULT DATA (For Fresh Installs) ---
+// --- DEFAULT DATA ---
 const initialKids: Kid[] = [
-  { id: 1, name: 'Alex', color: 'border-blue-500', headerColor: 'text-blue-400', pin: '1234', routines: ['Brush Teeth', 'Pack Backpack', 'Read 20 mins'], reminders: ['Tuesday: Library Books'] },
-  { id: 2, name: 'Jordan', color: 'border-green-500', headerColor: 'text-green-400', pin: '1234', routines: ['Brush Teeth', 'Pack Backpack', 'Practice Piano'], reminders: ['Soccer Cleats for Practice'] },
-  { id: 3, name: 'Taylor', color: 'border-purple-500', headerColor: 'text-purple-400', pin: '1234', routines: ['Brush Teeth', 'Pack Backpack', 'Lay out clothes'], reminders: [] },
-  { id: 4, name: 'Casey', color: 'border-orange-500', headerColor: 'text-orange-400', pin: '1234', routines: ['Brush Teeth', 'Pack Backpack', 'Put shoes away'], reminders: [] }
+  { id: 1, name: 'Alex', color: 'border-blue-500', headerColor: 'text-blue-400', pin: '1234', routines: ['Brush Teeth', 'Pack Backpack'], reminders: [{ id: 'r1', text: 'Library Books', days: [2] }] },
+  { id: 2, name: 'Jordan', color: 'border-green-500', headerColor: 'text-green-400', pin: '1234', routines: ['Brush Teeth', 'Practice Piano'], reminders: [{ id: 'r2', text: 'Soccer Cleats for Practice', days: [2, 4] }] },
+  { id: 3, name: 'Taylor', color: 'border-purple-500', headerColor: 'text-purple-400', pin: '1234', routines: ['Brush Teeth', 'Lay out clothes'], reminders: [] },
+  { id: 4, name: 'Casey', color: 'border-orange-500', headerColor: 'text-orange-400', pin: '1234', routines: ['Brush Teeth', 'Put shoes away'], reminders: [] }
 ];
 
 const initialChores: Chore[] = [
-  { id: 'c1', text: 'Load Dishwasher', type: 'daily', assigneeId: 1, done: false },
-  { id: 'c2', text: 'Wipe Counters', type: 'daily', assigneeId: 1, done: false },
-  { id: 'c3', text: 'Feed the Dog', type: 'daily', assigneeId: 2, done: false },
-  { id: 'c4', text: 'Clear Dinner Table', type: 'daily', assigneeId: 2, done: false },
-  { id: 'c5', text: 'Take out Trash', type: 'weekly', assigneeId: 1, done: false },
-  { id: 'c6', text: 'Clean Downstairs Bath', type: 'weekly', assigneeId: 2, done: false }
+  { id: 'c1', text: 'Load Dishwasher', type: 'daily', assigneeIds: [1], completedBy: [] },
+  { id: 'c2', text: 'Wipe Counters', type: 'daily', assigneeIds: [1], completedBy: [] },
+  { id: 'c3', text: 'Feed the Dog', type: 'daily', assigneeIds: [2, 3], completedBy: [] }, 
+  { id: 'c4', text: 'Clear Dinner Table', type: 'daily', assigneeIds: [2], completedBy: [] },
+  { id: 'c5', text: 'Take out Trash', type: 'weekly', assigneeIds: [1], completedBy: [] },
+  { id: 'c6', text: 'Clean Downstairs Bath', type: 'weekly', assigneeIds: [2], completedBy: [] }
 ];
 
-type CalendarEvent = { day: string; time: string; title: string; };
-const mockCalendar: CalendarEvent[] = [
+const mockCalendar = [
   { day: 'Mon', time: '3:30 PM', title: 'Dentist - Alex' },
   { day: 'Tue', time: '4:00 PM', title: 'Soccer Practice' },
   { day: 'Wed', time: '5:00 PM', title: 'Piano Lessons' },
@@ -87,44 +99,83 @@ const mockCalendar: CalendarEvent[] = [
 ];
 
 // --- COMPONENTS ---
-type ProgressRingProps = { progress: number; label: string; colorClass: string; strokeColor: string; onClick: () => void; };
-
-const ProgressRing = ({ progress, label, colorClass, strokeColor, onClick }: ProgressRingProps) => {
-  const radius = 60;
+const SmallProgressRing = ({ progress, kidName, colorClass, onClick }: { progress: number, kidName: string, colorClass: string, onClick: (e: React.MouseEvent) => void }) => {
+  const radius = 34;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progress / 100) * circumference;
 
   return (
-    <div className="flex flex-col items-center justify-center bg-gray-800 p-6 rounded-2xl cursor-pointer hover:bg-gray-750 transition-colors" onClick={onClick}>
-      <div className="relative flex items-center justify-center w-40 h-40">
-        <svg className="transform -rotate-90 w-40 h-40">
-          <circle cx="80" cy="80" r={radius} stroke="currentColor" strokeWidth="12" fill="transparent" className="text-gray-700" />
-          <circle
-            cx="80" cy="80" r={radius} stroke={strokeColor} strokeWidth="12" fill="transparent"
-            strokeDasharray={circumference} strokeDashoffset={strokeDashoffset}
-            className={`transition-all duration-1000 ease-out`} strokeLinecap="round"
-          />
+    <div className="flex flex-col items-center cursor-pointer hover:scale-105 transition-transform" onClick={onClick}>
+      <div className="relative flex items-center justify-center w-20 h-20 mb-2">
+        <svg className="transform -rotate-90 w-20 h-20">
+          <circle cx="40" cy="40" r={radius} stroke="currentColor" strokeWidth="6" fill="transparent" className="text-gray-700" />
+          <circle cx="40" cy="40" r={radius} stroke="currentColor" strokeWidth="6" fill="transparent" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} className={`transition-all duration-1000 ease-out ${colorClass}`} strokeLinecap="round" />
         </svg>
-        <div className="absolute text-3xl font-bold text-white">{progress}%</div>
+        <div className="absolute text-base font-bold text-white">{progress}%</div>
       </div>
-      <h3 className={`mt-4 text-xl font-semibold ${colorClass}`}>{label}</h3>
-      <p className="text-gray-400 text-sm mt-1">Tap to view cards</p>
+      <span className={`text-xs font-bold uppercase tracking-wider ${colorClass}`}>{kidName}</span>
+    </div>
+  );
+};
+
+const WeatherRing = ({ weather }: { weather: {current: number, high: number, low: number} | null }) => {
+  if (!weather) return (
+    <div className="flex items-center justify-center bg-gray-800 rounded-2xl p-4 h-[82px]">
+      <CloudSun className="text-gray-500 animate-pulse" />
+      <span className="text-gray-500 text-sm ml-3 font-semibold">Loading Weather...</span>
+    </div>
+  );
+
+  const progress = Math.max(0, Math.min(100, weather.current)); 
+  const radius = 22;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (progress / 100) * circumference;
+
+  return (
+    <div className="flex items-center justify-between bg-gray-800 rounded-2xl px-6 py-3">
+       <div className="flex items-center gap-5">
+           <div className="relative flex items-center justify-center w-14 h-14">
+              <svg className="transform -rotate-90 w-14 h-14">
+                <circle cx="28" cy="28" r={radius} stroke="currentColor" strokeWidth="4" fill="transparent" className="text-gray-700" />
+                <circle cx="28" cy="28" r={radius} stroke="#fbbf24" strokeWidth="4" fill="transparent"
+                  strokeDasharray={circumference} strokeDashoffset={strokeDashoffset}
+                  strokeLinecap="round" className="transition-all duration-1000" />
+              </svg>
+              <div className="absolute text-sm font-bold text-white">{weather.current}°</div>
+           </div>
+           <div className="flex flex-col">
+              <span className="font-bold text-white tracking-wide">Outside</span>
+              <div className="flex gap-3 mt-1">
+                  <div className="text-xs font-bold text-red-400 flex items-center"><ArrowUp size={12}/> {weather.high}°</div>
+                  <div className="text-xs font-bold text-blue-400 flex items-center"><ArrowDown size={12}/> {weather.low}°</div>
+              </div>
+           </div>
+       </div>
+       <CloudSun className="text-gray-600" size={28}/>
     </div>
   );
 };
 
 export default function App() {
-  const [view, setView] = useState<'dashboard' | 'kids' | 'admin-login' | 'admin'>('dashboard');
-  const [adminTab, setAdminTab] = useState<'settings' | 'kids' | 'chores'>('settings');
+  const [view, setView] = useState<'dashboard' | 'kid' | 'admin-login' | 'admin'>('dashboard');
+  const [activeKidId, setActiveKidId] = useState<number | null>(null);
+  const [adminTab, setAdminTab] = useState<'settings' | 'kids' | 'chores' | 'layout'>('settings');
   
   // App State
   const [kids, setKids] = useState<Kid[]>(initialKids);
   const [chores, setChores] = useState<Chore[]>(initialChores);
-  const [appSettings, setAppSettings] = useState<AppSettings>({ autoResetDailies: true, lastResetDate: getTodayStr() });
+  const [appSettings, setAppSettings] = useState<AppSettings>({ 
+    autoResetDailies: true, lastResetDate: getTodayStr(), zipCode: '', dashboardLayout: ['calendar', 'reminders', 'chores'] 
+  });
   const [user, setUser] = useState<User | null>(null);
+  const [weather, setWeather] = useState<{current: number, high: number, low: number} | null>(null);
   
+  // Weather Input State
+  const [weatherInput, setWeatherInput] = useState<string>('');
+  const [weatherStatus, setWeatherStatus] = useState<string>('');
+
   // Modals & Forms
-  const [pinModal, setPinModal] = useState<{ isOpen: boolean; kidId: number | null; choreId: string | null; }>({ isOpen: false, kidId: null, choreId: null });
+  const [pinModal, setPinModal] = useState<{ isOpen: boolean; kidId: number | null; }>({ isOpen: false, kidId: null });
   const [enteredPin, setEnteredPin] = useState<string>('');
   const [pinError, setPinError] = useState<boolean>(false);
 
@@ -134,19 +185,13 @@ export default function App() {
 
   const [editingKid, setEditingKid] = useState<Kid | null>(null);
   const [newItemText, setNewItemText] = useState({ routine: '', reminder: '' });
-  
-  const [newAdminChore, setNewAdminChore] = useState({ text: '', type: 'daily' as ChoreType, assigneeId: 1 });
+  const [newAdminChore, setNewAdminChore] = useState({ text: '', type: 'daily' as ChoreType });
 
-  // --- DATABASE SYNC & MIGRATION ---
+  // --- DATABASE SYNC ---
   useEffect(() => {
     const initAuth = async () => {
-      try {
-        // Connect to your personal Firebase
-        await signInAnonymously(auth);
-      } catch (error: any) {
-        // If Anonymous auth isn't enabled in your console yet, proceed anyway using Test Mode rules
-        setUser({ uid: 'local-test-user' } as User);
-      }
+      try { await signInAnonymously(auth); } 
+      catch (error: any) { setUser({ uid: 'local-test-user' } as User); }
     };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, (u) => { if (u) setUser(u); });
@@ -160,77 +205,107 @@ export default function App() {
     const unsubscribe = onSnapshot(sharedDocRef, (snapshot) => {
       if (snapshot.exists() && snapshot.data().kids) {
         const data = snapshot.data();
-        let currentKids = data.kids as any[]; // Using any to handle old structure migration
+        let currentKids = data.kids as Kid[]; 
         let currentChores = data.chores as Chore[];
-        let currentSettings = data.settings as AppSettings || { autoResetDailies: true, lastResetDate: getTodayStr() };
+        let currentSettings = data.settings as AppSettings || { autoResetDailies: true, lastResetDate: getTodayStr(), zipCode: '', dashboardLayout: ['calendar', 'reminders', 'chores'] };
         let needsSave = false;
-        
-        // MIGRATION LOGIC: If old structure (chores inside kids), migrate to master list
-        if (!currentChores) {
-          currentChores = [];
-          const migratedKids: Kid[] = [];
-          
-          currentKids.forEach(k => {
-            if (k.daily) k.daily.forEach((c: any) => currentChores.push({ id: c.id, text: c.text, type: 'daily', assigneeId: k.id, done: c.done }));
-            if (k.weekly) k.weekly.forEach((c: any) => currentChores.push({ id: c.id, text: c.text, type: 'weekly', assigneeId: k.id, done: c.done }));
-            
-            migratedKids.push({
-              id: k.id, name: k.name, color: k.color, headerColor: k.headerColor, pin: k.pin,
-              routines: k.routines || [], reminders: k.reminders || []
-            });
-          });
-          currentKids = migratedKids;
-          needsSave = true;
-        }
 
-        // AUTO-RESET LOGIC
+        if (!currentSettings.dashboardLayout) { currentSettings.dashboardLayout = ['calendar', 'reminders', 'chores']; needsSave = true; }
+        if (currentSettings.zipCode === undefined) { currentSettings.zipCode = ''; needsSave = true; }
+
         const today = getTodayStr();
         if (currentSettings.autoResetDailies && currentSettings.lastResetDate !== today) {
-          currentChores = currentChores.map(c => c.type === 'daily' ? { ...c, done: false } : c);
+          currentChores = currentChores.map(c => c.type === 'daily' ? { ...c, completedBy: [] } : c);
           currentSettings.lastResetDate = today;
           needsSave = true;
         }
 
-        // Apply to UI state immediately
         setKids(currentKids);
         setChores(currentChores);
         setAppSettings(currentSettings);
+        setWeatherInput(currentSettings.zipCode); // Populate editor input
 
-        // Update DB silently if we migrated or auto-reset
-        if (needsSave) {
-          setDoc(sharedDocRef, { kids: currentKids, chores: currentChores, settings: currentSettings }, { merge: true });
-        }
+        if (needsSave) { setDoc(sharedDocRef, { kids: currentKids, chores: currentChores, settings: currentSettings }, { merge: true }); }
       } else {
-        // Fresh start
-        setDoc(sharedDocRef, { kids: initialKids, chores: initialChores, settings: { autoResetDailies: true, lastResetDate: getTodayStr() } });
+        setDoc(sharedDocRef, { kids: initialKids, chores: initialChores, settings: { autoResetDailies: true, lastResetDate: getTodayStr(), zipCode: '', dashboardLayout: ['calendar', 'reminders', 'chores'] } });
       }
     });
     return () => unsubscribe();
   }, [user]);
 
+  // --- WEATHER FETCH ---
+  useEffect(() => {
+    if(!appSettings.zipCode) {
+      setWeather(null);
+      return;
+    }
+    const fetchWeather = async () => {
+       try {
+          const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(appSettings.zipCode)}&count=1`);
+          const geoData = await geoRes.json();
+          if(geoData.results && geoData.results.length > 0) {
+             const { latitude, longitude } = geoData.results[0];
+             const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min&current_weather=true&temperature_unit=fahrenheit&timezone=auto`);
+             const wData = await wRes.json();
+             setWeather({
+                current: Math.round(wData.current_weather.temperature),
+                high: Math.round(wData.daily.temperature_2m_max[0]),
+                low: Math.round(wData.daily.temperature_2m_min[0])
+             });
+          }
+       } catch(e) { console.error("Weather fetch failed:", e); }
+    };
+    fetchWeather();
+    const interval = setInterval(fetchWeather, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [appSettings.zipCode]);
+
   // --- CALCULATIONS ---
-  const calculateProgress = (type: ChoreType) => {
-    const filtered = chores.filter(c => c.type === type);
-    if (filtered.length === 0) return 0;
-    const done = filtered.filter(c => c.done).length;
-    return Math.round((done / filtered.length) * 100);
+  const calculateKidProgress = (kidId: number, type: ChoreType) => {
+    const assigned = chores.filter(c => c.assigneeIds.includes(kidId) && c.type === type);
+    if (assigned.length === 0) return 0;
+    const done = assigned.filter(c => c.completedBy.includes(kidId)).length;
+    return Math.round((done / assigned.length) * 100);
   };
 
-  const dailyProgress = calculateProgress('daily');
-  const weeklyProgress = calculateProgress('weekly');
+  const calculateOverallProgress = (type: ChoreType) => {
+    let totalAssignments = 0;
+    let totalDone = 0;
+    chores.filter(c => c.type === type).forEach(c => {
+      totalAssignments += c.assigneeIds.length;
+      totalDone += c.completedBy.length;
+    });
+    return totalAssignments === 0 ? 0 : Math.round((totalDone / totalAssignments) * 100);
+  };
 
+  const todayDayIndex = new Date().getDay(); 
   const activeReminders = kids.flatMap(kid => 
-    kid.reminders.map(rem => ({ 
-      kidName: kid.name, 
-      color: kid.color.replace('border-', 'bg-').replace('-500', '-500'), // Quick tailwind map
-      text: rem 
-    }))
+    kid.reminders
+      .filter(rem => rem.days.includes(todayDayIndex))
+      .map(rem => ({ 
+        kidName: kid.name, color: kid.color.replace('border-', 'bg-').replace('-500', '-500'), text: rem.text 
+      }))
   );
+
+  // --- KID DASHBOARD HANDLERS ---
+  // Authenticated kids can toggle chores directly from their dashboard without PINs
+  const toggleKidChore = async (choreId: string, kidId: number) => {
+    const updatedChores = chores.map(c => {
+      if (c.id === choreId) {
+        const isDone = c.completedBy.includes(kidId);
+        const newCompleted = isDone ? c.completedBy.filter(id => id !== kidId) : [...c.completedBy, kidId];
+        return { ...c, completedBy: newCompleted };
+      }
+      return c;
+    });
+    setChores(updatedChores);
+    if (user) await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true });
+  };
 
   // --- ADMIN SETTINGS HANDLERS ---
   const handleResetDailies = async () => {
     if (!user) return;
-    const resetChores = chores.map(c => c.type === 'daily' ? { ...c, done: false } : c);
+    const resetChores = chores.map(c => c.type === 'daily' ? { ...c, completedBy: [] } : c);
     setChores(resetChores);
     await setDoc(doc(db, SHARED_DOC_PATH), { chores: resetChores, settings: { ...appSettings, lastResetDate: getTodayStr() } }, { merge: true });
   };
@@ -241,42 +316,99 @@ export default function App() {
     await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true });
   };
 
+  const handleSaveWeatherSetting = async () => {
+    if (!user) return;
+    setWeatherStatus('Checking city...');
+    try {
+       if (!weatherInput.trim()) {
+         const newSettings = { ...appSettings, zipCode: '' };
+         setAppSettings(newSettings);
+         await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true });
+         setWeatherStatus('Weather disabled.');
+         setTimeout(() => setWeatherStatus(''), 3000);
+         return;
+       }
+
+       const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(weatherInput)}&count=1`);
+       const geoData = await geoRes.json();
+       
+       if(geoData.results && geoData.results.length > 0) {
+         const foundCity = `${geoData.results[0].name}, ${geoData.results[0].admin1 || geoData.results[0].country}`;
+         setWeatherStatus(`✅ Found: ${foundCity}`);
+         const newSettings = { ...appSettings, zipCode: weatherInput.trim() };
+         setAppSettings(newSettings);
+         await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true });
+         setTimeout(() => setWeatherStatus(''), 4000);
+       } else {
+         setWeatherStatus('❌ City not found. Please try again.');
+       }
+    } catch(e) {
+       setWeatherStatus('❌ Error reaching weather service.');
+    }
+  };
+
+  const moveWidget = async (idx: number, direction: number) => {
+    const newLayout = [...appSettings.dashboardLayout];
+    if (idx + direction < 0 || idx + direction >= newLayout.length) return;
+    const temp = newLayout[idx];
+    newLayout[idx] = newLayout[idx + direction];
+    newLayout[idx + direction] = temp;
+    setAppSettings({ ...appSettings, dashboardLayout: newLayout });
+    await setDoc(doc(db, SHARED_DOC_PATH), { settings: { ...appSettings, dashboardLayout: newLayout } }, { merge: true });
+  };
+
   // --- KID EDITOR HANDLERS ---
   const handleSaveKid = async () => {
     if (!editingKid || !user) return;
     const updatedKids = kids.map(k => k.id === editingKid.id ? editingKid : k);
-    setKids(updatedKids); // Optimistic UI
-    
-    // Crucial fix: The modal immediately closes to provide snappy feedback
+    setKids(updatedKids); 
     setEditingKid(null);
-    
     await setDoc(doc(db, SHARED_DOC_PATH), { kids: updatedKids }, { merge: true });
   };
 
-  const handleAddItem = (field: 'routines' | 'reminders') => {
-    const text = field === 'routines' ? newItemText.routine : newItemText.reminder;
-    if (!text.trim() || !editingKid) return;
-    setEditingKid({ ...editingKid, [field]: [...editingKid[field], text.trim()] });
-    setNewItemText(prev => ({ ...prev, [field === 'routines' ? 'routine' : 'reminder']: '' }));
+  const handleAddRoutine = () => {
+    if (!newItemText.routine.trim() || !editingKid) return;
+    setEditingKid({ ...editingKid, routines: [...editingKid.routines, newItemText.routine.trim()] });
+    setNewItemText(prev => ({ ...prev, routine: '' }));
   };
 
-  const handleRemoveItem = (field: 'routines' | 'reminders', idx: number) => {
+  const handleAddReminder = () => {
+    if (!newItemText.reminder.trim() || !editingKid) return;
+    const newReminder: Reminder = { id: `rem-${Date.now()}`, text: newItemText.reminder.trim(), days: [1,2,3,4,5] }; 
+    setEditingKid({ ...editingKid, reminders: [...editingKid.reminders, newReminder] });
+    setNewItemText(prev => ({ ...prev, reminder: '' }));
+  };
+
+  const handleRemoveReminder = (id: string) => {
+    if (!editingKid) return;
+    setEditingKid({ ...editingKid, reminders: editingKid.reminders.filter(r => r.id !== id) });
+  };
+
+  const handleRemoveItem = (field: 'routines', idx: number) => {
     if (!editingKid) return;
     const newArr = [...editingKid[field]];
     newArr.splice(idx, 1);
     setEditingKid({ ...editingKid, [field]: newArr });
   };
 
+  const toggleReminderDay = (reminderId: string, dayIndex: number) => {
+    if (!editingKid) return;
+    setEditingKid({
+      ...editingKid,
+      reminders: editingKid.reminders.map(r => {
+        if (r.id === reminderId) {
+          const days = r.days.includes(dayIndex) ? r.days.filter(d => d !== dayIndex) : [...r.days, dayIndex].sort();
+          return { ...r, days };
+        }
+        return r;
+      })
+    });
+  };
+
   // --- MASTER CHORE HANDLERS ---
   const handleAdminAddChore = async () => {
     if (!newAdminChore.text.trim() || !user) return;
-    const chore: Chore = {
-      id: `c-${Date.now()}`,
-      text: newAdminChore.text.trim(),
-      type: newAdminChore.type,
-      assigneeId: Number(newAdminChore.assigneeId),
-      done: false
-    };
+    const chore: Chore = { id: `c-${Date.now()}`, text: newAdminChore.text.trim(), type: newAdminChore.type, assigneeIds: [], completedBy: [] };
     const updatedChores = [...chores, chore];
     setChores(updatedChores);
     await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true });
@@ -288,6 +420,25 @@ export default function App() {
     const updatedChores = chores.filter(c => c.id !== id);
     setChores(updatedChores);
     await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true });
+  };
+
+  const handleChoreTextChange = (id: string, newText: string) => {
+    setChores(chores.map(c => c.id === id ? { ...c, text: newText } : c));
+  };
+
+  const handleChoreTextBlur = async () => { if (user) await setDoc(doc(db, SHARED_DOC_PATH), { chores }, { merge: true }); };
+
+  const toggleChoreAssignee = async (choreId: string, kidId: number) => {
+    const updatedChores = chores.map(c => {
+      if (c.id === choreId) {
+        const newAssignees = c.assigneeIds.includes(kidId) ? c.assigneeIds.filter(id => id !== kidId) : [...c.assigneeIds, kidId];
+        const newCompleted = c.completedBy.filter(id => newAssignees.includes(id));
+        return { ...c, assigneeIds: newAssignees, completedBy: newCompleted };
+      }
+      return c;
+    });
+    setChores(updatedChores);
+    if (user) await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true });
   };
 
   // --- PIN & GENERAL HANDLERS ---
@@ -302,7 +453,7 @@ export default function App() {
       const newPin = enteredAdminPin + num;
       setEnteredAdminPin(newPin); setAdminPinError(false);
       if (newPin.length === 6) {
-        if (newPin === '112358') { setView('admin'); setEnteredAdminPin(''); setAdminTab('settings'); } 
+        if (newPin === '112358') { setView('admin'); setEnteredAdminPin(''); setAdminTab('chores'); } 
         else { setAdminPinError(true); setTimeout(() => setEnteredAdminPin(''), 500); }
       }
     }
@@ -316,10 +467,10 @@ export default function App() {
         const kid = kids.find(k => k.id === pinModal.kidId);
         if (!kid) return; 
         if (kid.pin === newPin) {
-          const updatedChores = chores.map(c => c.id === pinModal.choreId ? { ...c, done: true } : c);
-          setChores(updatedChores);
-          if (user) { setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true }); }
-          setTimeout(() => setPinModal({ isOpen: false, kidId: null, choreId: null }), 300);
+          // Access granted! Switch to their personal dashboard view
+          setActiveKidId(kid.id);
+          setView('kid');
+          setTimeout(() => setPinModal({ isOpen: false, kidId: null }), 300);
         } else {
           setPinError(true); setTimeout(() => setEnteredPin(''), 500);
         }
@@ -327,7 +478,6 @@ export default function App() {
     }
   };
 
-  // Keyboard support 
   useEffect(() => {
     if (!pinModal.isOpen && view !== 'admin-login') return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -335,8 +485,8 @@ export default function App() {
         if (pinModal.isOpen) handlePinPadClick(e.key);
         else handleAdminPinPadClick(e.key);
       } else if (e.key === 'Escape') {
-        if (pinModal.isOpen) setPinModal({ isOpen: false, kidId: null, choreId: null });
-        else setView('dashboard');
+        if (pinModal.isOpen) setPinModal({ isOpen: false, kidId: null });
+        else { setView('dashboard'); setActiveKidId(null); }
       } else if (e.key === 'Backspace') {
         if (pinModal.isOpen) { setEnteredPin(prev => prev.slice(0, -1)); setPinError(false); }
         else { setEnteredAdminPin(prev => prev.slice(0, -1)); setAdminPinError(false); }
@@ -345,6 +495,174 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [pinModal.isOpen, view, enteredPin, enteredAdminPin]);
+
+  // --- RENDER HELPERS ---
+  const renderAdminChoreList = (type: ChoreType) => {
+    const typeChores = chores.filter(c => c.type === type);
+    return (
+      <div className="space-y-2">
+        <div className="flex px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider items-center gap-4">
+          <div className="w-2 h-2" />
+          <div className="flex-1">Chore Name</div>
+          <div className="flex gap-4">
+            {kids.map(kid => (
+              <div key={kid.id} className="w-16 sm:w-24 text-center font-bold" title={kid.name}>{kid.name}</div>
+            ))}
+          </div>
+          <div className="w-8" />
+        </div>
+        
+        {typeChores.length === 0 && <div className="text-center text-gray-600 py-4 italic">No {type} chores.</div>}
+        
+        {typeChores.map(chore => {
+          const isUnassigned = chore.assigneeIds.length === 0;
+          return (
+            <div key={chore.id} className={`flex items-center gap-4 p-3 rounded-xl border transition-colors ${isUnassigned ? 'bg-red-900/20 border-red-500/50 hover:bg-red-900/30' : 'bg-gray-900 border-gray-700 hover:bg-gray-800'}`}>
+              <div className={`w-2 h-2 rounded-full ${chore.type === 'daily' ? 'bg-green-500' : 'bg-purple-500'} flex-shrink-0`} title={chore.type}></div>
+              <input 
+                value={chore.text}
+                onChange={e => handleChoreTextChange(chore.id, e.target.value)}
+                onBlur={handleChoreTextBlur}
+                className="flex-1 bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-blue-500 px-1 py-1 min-w-[100px]"
+              />
+              <div className="flex gap-4">
+                {kids.map(kid => (
+                  <div key={kid.id} className="flex flex-col items-center justify-center w-16 sm:w-24">
+                    <input 
+                      type="checkbox" checked={chore.assigneeIds.includes(kid.id)} onChange={() => toggleChoreAssignee(chore.id, kid.id)}
+                      className="w-5 h-5 rounded border-gray-600 cursor-pointer accent-blue-500"
+                    />
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => handleAdminDeleteChore(chore.id)} className="text-red-400 hover:text-red-300 p-2 hover:bg-red-900/30 rounded-lg transition-colors flex-shrink-0"><X size={18} /></button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderCalendarWidget = () => (
+    <div key="calendar" className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col h-full">
+      <h2 className="text-xl font-semibold text-blue-400 flex items-center gap-2 mb-6">
+        <Calendar /> This Week
+      </h2>
+      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        {mockCalendar.map((event, i) => (
+          <div key={i} className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+            <div className="text-sm text-blue-300 font-bold mb-1">{event.day} • {event.time}</div>
+            <div className="text-lg">{event.title}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderRemindersWidget = () => (
+    <div key="reminders" className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col h-full">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold text-orange-400 flex items-center gap-2">
+          <AlertCircle /> Today
+        </h2>
+        <span className="text-sm font-bold text-gray-500 uppercase tracking-widest">{DAYS_OF_WEEK[todayDayIndex]}</span>
+      </div>
+      
+      {appSettings.zipCode && <div className="mb-6"><WeatherRing weather={weather} /></div>}
+      
+      <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+        {activeReminders.length === 0 ? (
+          <div className="text-gray-500 italic p-4 text-center">No reminders scheduled for today.</div>
+        ) : (
+          activeReminders.map((reminder, i) => (
+            <div key={i} className="flex items-start gap-3 bg-gray-800 p-4 rounded-xl">
+              <div className={`w-3 h-3 rounded-full ${reminder.color} mt-1.5 flex-shrink-0`}></div>
+              <div>
+                <span className="text-xs font-bold text-gray-500 block mb-0.5">{reminder.kidName}</span>
+                <span className="text-lg leading-snug text-gray-200">{reminder.text}</span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+
+  const renderChoresWidget = () => {
+    const dailyOverall = calculateOverallProgress('daily');
+    const weeklyOverall = calculateOverallProgress('weekly');
+    
+    return (
+      <div key="chores" className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col h-full overflow-hidden relative">
+        <div className="absolute top-6 right-6 text-xs font-bold text-gray-500 uppercase bg-gray-800 px-3 py-1 rounded-lg">
+          Tap Ring to View
+        </div>
+        <h2 className="text-xl font-semibold text-green-400 flex items-center gap-2 mb-6 border-b border-gray-800 pb-4 shrink-0">
+          <CheckCircle /> Chore Progress
+        </h2>
+        
+        <div className="flex-1 overflow-y-auto pr-2 pb-4">
+           {/* DAILY SECTION */}
+           <div className="mb-8 border-b border-gray-800 pb-6">
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-6 text-center">Daily Tasks</h3>
+              <div className="grid grid-cols-2 gap-y-8 gap-x-2 place-content-center mb-8">
+                {kids.map(kid => (
+                   <SmallProgressRing 
+                     key={`d-${kid.id}`} 
+                     progress={calculateKidProgress(kid.id, 'daily')} 
+                     kidName={kid.name} 
+                     colorClass={kid.headerColor}
+                     onClick={(e) => { e.stopPropagation(); setPinModal({ isOpen: true, kidId: kid.id }); setEnteredPin(''); setPinError(false); }}
+                   />
+                ))}
+              </div>
+              <div className="px-2">
+                <div className="flex justify-between text-xs mb-2">
+                  <span className="font-bold text-gray-400 uppercase tracking-wide">Family Daily</span>
+                  <span className="font-bold text-white">{dailyOverall}%</span>
+                </div>
+                <div className="w-full bg-gray-800 rounded-full h-2.5 border border-gray-700 overflow-hidden">
+                  <div className="bg-green-500 h-full transition-all duration-1000 ease-out" style={{ width: `${dailyOverall}%` }}></div>
+                </div>
+              </div>
+           </div>
+
+           {/* WEEKLY SECTION */}
+           <div>
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-6 text-center">Weekly Tasks</h3>
+              <div className="grid grid-cols-2 gap-y-8 gap-x-2 place-content-center mb-8">
+                {kids.map(kid => (
+                   <SmallProgressRing 
+                     key={`w-${kid.id}`} 
+                     progress={calculateKidProgress(kid.id, 'weekly')} 
+                     kidName={kid.name} 
+                     colorClass={kid.headerColor}
+                     onClick={(e) => { e.stopPropagation(); setPinModal({ isOpen: true, kidId: kid.id }); setEnteredPin(''); setPinError(false); }}
+                   />
+                ))}
+              </div>
+              <div className="px-2">
+                <div className="flex justify-between text-xs mb-2">
+                  <span className="font-bold text-gray-400 uppercase tracking-wide">Family Weekly</span>
+                  <span className="font-bold text-white">{weeklyOverall}%</span>
+                </div>
+                <div className="w-full bg-gray-800 rounded-full h-2.5 border border-gray-700 overflow-hidden">
+                  <div className="bg-purple-500 h-full transition-all duration-1000 ease-out" style={{ width: `${weeklyOverall}%` }}></div>
+                </div>
+              </div>
+           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const layoutMap: Record<string, () => JSX.Element> = {
+    'calendar': renderCalendarWidget,
+    'reminders': renderRemindersWidget,
+    'chores': renderChoresWidget
+  };
+
+  const gridColsClass = { 1: 'md:grid-cols-1', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3', 4: 'md:grid-cols-4' }[appSettings.dashboardLayout.length] || 'md:grid-cols-3';
 
   return (
     <div className="min-h-screen bg-gray-950 text-white p-6 font-sans select-none">
@@ -361,122 +679,134 @@ export default function App() {
           </div>
           Family Command Center
         </h1>
-        {(view === 'kids' || view === 'admin') && (
-          <button onClick={() => setView('dashboard')} className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg transition-colors font-semibold">
-            <ChevronLeft size={20} /> Back to Dashboard
-          </button>
-        )}
+        
+        <div className="flex items-center gap-4">
+          {(view === 'kid' || view === 'admin') && (
+            <button onClick={() => { setView('dashboard'); setActiveKidId(null); }} className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 px-4 py-4 rounded-xl transition-colors font-semibold h-[74px]">
+              <ChevronLeft size={20} /> Back to Dashboard
+            </button>
+          )}
+        </div>
       </div>
 
       {/* VIEW: DASHBOARD */}
       {view === 'dashboard' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[80vh]">
-          {/* Calendar */}
-          <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col">
-            <h2 className="text-xl font-semibold text-blue-400 flex items-center gap-2 mb-6">
-              <Calendar /> This Week
-            </h2>
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              {mockCalendar.map((event, i) => (
-                <div key={i} className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-                  <div className="text-sm text-blue-300 font-bold mb-1">{event.day} • {event.time}</div>
-                  <div className="text-lg">{event.title}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Reminders - Now fueled by kid-specific reminders! */}
-          <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col">
-            <h2 className="text-xl font-semibold text-orange-400 flex items-center gap-2 mb-6">
-              <AlertCircle /> Don't Forget
-            </h2>
-            <div className="flex-1 overflow-y-auto space-y-3">
-              {activeReminders.length === 0 ? (
-                <div className="text-gray-500 italic p-4 text-center">No active reminders.</div>
-              ) : (
-                activeReminders.map((reminder, i) => (
-                  <div key={i} className="flex items-start gap-3 bg-gray-800 p-4 rounded-xl">
-                    <div className={`w-3 h-3 rounded-full ${reminder.color} mt-1.5 flex-shrink-0`}></div>
-                    <div>
-                      <span className="text-xs font-bold text-gray-500 block mb-0.5">{reminder.kidName}</span>
-                      <span className="text-lg leading-snug text-gray-200">{reminder.text}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-          {/* Progress Rings */}
-          <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col">
-            <h2 className="text-xl font-semibold text-green-400 flex items-center gap-2 mb-6">
-              <CheckCircle /> Chore Progress
-            </h2>
-            <div className="flex-1 flex flex-col justify-center gap-8">
-              <ProgressRing progress={dailyProgress} label="Daily Chores" colorClass="text-green-400" strokeColor="#4ade80" onClick={() => setView('kids')} />
-              <ProgressRing progress={weeklyProgress} label="Weekly Chores" colorClass="text-purple-400" strokeColor="#c084fc" onClick={() => setView('kids')} />
-            </div>
-          </div>
+        <div className={`grid grid-cols-1 ${gridColsClass} gap-6 h-[80vh]`}>
+          {appSettings.dashboardLayout.map(widgetId => layoutMap[widgetId] && layoutMap[widgetId]())}
         </div>
       )}
 
-      {/* VIEW: KID CARDS */}
-      {view === 'kids' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 h-[80vh]">
-          {kids.map(kid => {
-            const kidDaily = chores.filter(c => c.assigneeId === kid.id && c.type === 'daily');
-            const kidWeekly = chores.filter(c => c.assigneeId === kid.id && c.type === 'weekly');
+      {/* VIEW: SINGLE KID DASHBOARD */}
+      {view === 'kid' && activeKidId && (() => {
+        const kid = kids.find(k => k.id === activeKidId);
+        if (!kid) return null;
+        
+        const kidDaily = chores.filter(c => c.assigneeIds.includes(kid.id) && c.type === 'daily');
+        const kidWeekly = chores.filter(c => c.assigneeIds.includes(kid.id) && c.type === 'weekly');
+        const kidTodayReminders = kid.reminders.filter(r => r.days.includes(todayDayIndex));
+
+        return (
+          <div className={`bg-gray-900 border-t-8 ${kid.color} rounded-3xl p-8 shadow-xl min-h-[80vh] flex flex-col`}>
+            <h2 className={`text-4xl font-bold ${kid.headerColor} mb-8 border-b border-gray-800 pb-4`}>
+              Welcome, {kid.name}!
+            </h2>
             
-            return (
-              <div key={kid.id} className={`bg-gray-900 border-t-8 ${kid.color} rounded-3xl p-6 shadow-xl flex flex-col h-full`}>
-                <h2 className={`text-2xl font-bold ${kid.headerColor} mb-6 border-b border-gray-800 pb-4`}>{kid.name}</h2>
-                <div className="flex-1 overflow-y-auto space-y-6 pr-2">
-                  {/* Daily Chores */}
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2"><ListTodo size={16} /> Daily To-Do</h3>
-                    <div className="space-y-2">
-                      {kidDaily.length === 0 && <div className="text-gray-600 italic text-sm">No daily chores assigned.</div>}
-                      {kidDaily.map(chore => (
-                        <div key={chore.id} onClick={() => { if(!chore.done) { setPinModal({ isOpen: true, kidId: kid.id, choreId: chore.id }); setEnteredPin(''); setPinError(false); } }}
-                          className={`p-4 rounded-xl flex items-center justify-between transition-all ${chore.done ? 'bg-gray-800 opacity-50 cursor-default' : 'bg-gray-800 hover:bg-gray-700 cursor-pointer border border-gray-700 hover:border-gray-500'}`}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 flex-1">
+              
+              {/* LEFT COLUMN: CHORES */}
+              <div className="space-y-10 border-r border-gray-800 pr-8">
+                {/* Daily Chores */}
+                <div>
+                  <h3 className="text-xl font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <ListTodo className="text-green-500"/> Daily To-Do
+                  </h3>
+                  <div className="space-y-4">
+                    {kidDaily.length === 0 && <div className="text-gray-600 italic text-lg">No daily chores assigned.</div>}
+                    {kidDaily.map(chore => {
+                      const isDone = chore.completedBy.includes(kid.id);
+                      return (
+                        <div key={chore.id} onClick={() => toggleKidChore(chore.id, kid.id)}
+                          className={`p-6 rounded-2xl flex items-center justify-between transition-all cursor-pointer border-2 ${isDone ? 'bg-gray-800 opacity-60 border-gray-700' : 'bg-gray-800 hover:bg-gray-750 border-gray-600 hover:border-gray-500'}`}
                         >
-                          <span className={`text-lg ${chore.done ? 'line-through text-gray-500' : 'text-gray-100'}`}>{chore.text}</span>
-                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${chore.done ? 'border-green-500 bg-green-500 text-gray-900' : 'border-gray-500'}`}>{chore.done && <CheckCircle size={16} />}</div>
+                          <span className={`text-2xl font-semibold ${isDone ? 'line-through text-gray-500' : 'text-gray-100'}`}>{chore.text}</span>
+                          <div className={`w-8 h-8 rounded-full border-4 flex items-center justify-center transition-colors ${isDone ? 'border-green-500 bg-green-500 text-gray-900' : 'border-gray-500'}`}>
+                            {isDone && <CheckCircle size={20} strokeWidth={3} />}
+                          </div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
-                  {/* Weekly Chores */}
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2"><ListTodo size={16} /> Weekly Deep Clean</h3>
-                    <div className="space-y-2">
-                      {kidWeekly.length === 0 && <div className="text-gray-600 italic text-sm">No weekly chores assigned.</div>}
-                      {kidWeekly.map(chore => (
-                        <div key={chore.id} onClick={() => { if(!chore.done) { setPinModal({ isOpen: true, kidId: kid.id, choreId: chore.id }); setEnteredPin(''); setPinError(false); } }}
-                          className={`p-4 rounded-xl flex items-center justify-between transition-all ${chore.done ? 'bg-gray-800 opacity-50 cursor-default' : 'bg-gray-800 hover:bg-gray-700 cursor-pointer border border-gray-700 hover:border-gray-500'}`}
+                </div>
+
+                {/* Weekly Chores */}
+                <div>
+                  <h3 className="text-xl font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <ListTodo className="text-purple-500" /> Weekly Deep Clean
+                  </h3>
+                  <div className="space-y-4">
+                    {kidWeekly.length === 0 && <div className="text-gray-600 italic text-lg">No weekly chores assigned.</div>}
+                    {kidWeekly.map(chore => {
+                      const isDone = chore.completedBy.includes(kid.id);
+                      return (
+                        <div key={chore.id} onClick={() => toggleKidChore(chore.id, kid.id)}
+                          className={`p-6 rounded-2xl flex items-center justify-between transition-all cursor-pointer border-2 ${isDone ? 'bg-gray-800 opacity-60 border-gray-700' : 'bg-gray-800 hover:bg-gray-750 border-gray-600 hover:border-gray-500'}`}
                         >
-                          <span className={`text-lg ${chore.done ? 'line-through text-gray-500' : 'text-gray-100'}`}>{chore.text}</span>
-                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${chore.done ? 'border-purple-500 bg-purple-500 text-gray-900' : 'border-gray-500'}`}>{chore.done && <CheckCircle size={16} />}</div>
+                          <span className={`text-2xl font-semibold ${isDone ? 'line-through text-gray-500' : 'text-gray-100'}`}>{chore.text}</span>
+                          <div className={`w-8 h-8 rounded-full border-4 flex items-center justify-center transition-colors ${isDone ? 'border-purple-500 bg-purple-500 text-gray-900' : 'border-gray-500'}`}>
+                            {isDone && <CheckCircle size={20} strokeWidth={3} />}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Routines */}
-                  <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-800/50">
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Routines (Don't Forget)</h3>
-                    {kid.routines.length === 0 ? (
-                       <span className="text-gray-600 italic text-sm">No routines set.</span>
-                    ) : (
-                      <ul className="list-disc list-inside space-y-1 text-gray-400">
-                        {kid.routines.map((routine, idx) => <li key={idx}>{routine}</li>)}
-                      </ul>
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+
+              {/* RIGHT COLUMN: ROUTINES & REMINDERS */}
+              <div className="space-y-8">
+                {/* Reminders */}
+                <div className="bg-gray-800/40 p-8 rounded-3xl border border-gray-800">
+                  <h3 className="text-xl font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <AlertCircle className="text-orange-500" /> Today's Focus
+                  </h3>
+                  {kidTodayReminders.length === 0 ? (
+                    <span className="text-gray-600 italic text-lg">No special reminders today.</span>
+                  ) : (
+                    <div className="space-y-4">
+                      {kidTodayReminders.map(rem => (
+                        <div key={rem.id} className="flex items-start gap-4 bg-gray-800 p-5 rounded-2xl">
+                           <div className={`w-3 h-3 rounded-full mt-2 flex-shrink-0 ${kid.color.replace('border-', 'bg-').replace('-500', '-500')}`}></div>
+                           <span className="text-xl text-gray-200">{rem.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Routines */}
+                <div className="bg-gray-800/40 p-8 rounded-3xl border border-gray-800">
+                  <h3 className="text-xl font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <RotateCcw className="text-blue-500"/> Core Routines
+                  </h3>
+                  {kid.routines.length === 0 ? (
+                    <span className="text-gray-600 italic text-lg">No routines set.</span>
+                  ) : (
+                    <ul className="list-none space-y-4">
+                      {kid.routines.map((routine, idx) => (
+                        <li key={idx} className="text-xl text-gray-300 flex items-center gap-3">
+                          <div className="w-2 h-2 bg-gray-600 rounded-full"></div>
+                          {routine}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
       {/* VIEW: ADMIN LOGIN */}
       {view === 'admin-login' && (
@@ -503,63 +833,26 @@ export default function App() {
           {/* Admin Navigation */}
           <div className="flex items-center gap-6 border-b border-gray-800 pb-4 mb-6">
             <h2 className="text-2xl font-semibold text-blue-400 flex items-center gap-2 border-r border-gray-800 pr-6"><Settings /> Admin</h2>
-            <button onClick={() => setAdminTab('settings')} className={`font-bold transition-colors ${adminTab === 'settings' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>Settings</button>
-            <button onClick={() => setAdminTab('kids')} className={`font-bold transition-colors ${adminTab === 'kids' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>Manage Kids</button>
             <button onClick={() => setAdminTab('chores')} className={`font-bold transition-colors ${adminTab === 'chores' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>Master Chore List</button>
+            <button onClick={() => setAdminTab('kids')} className={`font-bold transition-colors ${adminTab === 'kids' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>Kids & Routines</button>
+            <button onClick={() => setAdminTab('layout')} className={`font-bold transition-colors ${adminTab === 'layout' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>Layout & Design</button>
+            <button onClick={() => setAdminTab('settings')} className={`font-bold transition-colors ${adminTab === 'settings' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>System Settings</button>
           </div>
           
           <div className="flex-1 overflow-y-auto space-y-6 pr-2">
             
-            {/* TAB: SETTINGS */}
-            {adminTab === 'settings' && (
-              <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
-                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><RotateCcw className="text-orange-400" /> Daily Resets</h3>
-                <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
-                  <div className="flex items-center justify-between bg-gray-900 p-4 rounded-xl border border-gray-700 w-full md:w-1/2">
-                    <div>
-                      <span className="font-bold text-white block">Auto-Reset Dailies</span>
-                      <span className="text-gray-500 text-sm">Uncheck all daily chores at midnight</span>
-                    </div>
-                    <button 
-                      onClick={toggleAutoReset}
-                      className={`w-14 h-8 rounded-full transition-colors relative ${appSettings.autoResetDailies ? 'bg-green-500' : 'bg-gray-600'}`}
-                    >
-                      <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-transform ${appSettings.autoResetDailies ? 'translate-x-7' : 'translate-x-1'}`} />
-                    </button>
-                  </div>
-                  <button onClick={handleResetDailies} className="bg-gray-900 hover:bg-gray-700 border border-gray-700 text-orange-400 px-6 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors w-full md:w-auto justify-center">
-                    <RotateCcw size={20} /> Force Reset Now
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: KIDS */}
-            {adminTab === 'kids' && (
-              <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
-                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Users className="text-green-400" /> Edit Profiles & Routines</h3>
-                <div className="grid grid-cols-1 gap-4">
-                  {kids.map(kid => (
-                    <div key={kid.id} className="bg-gray-900 p-4 rounded-xl border border-gray-700 flex justify-between items-center">
-                      <div>
-                        <span className={`font-bold ${kid.headerColor}`}>{kid.name}</span>
-                        <span className="text-gray-500 text-sm ml-3 border-l border-gray-700 pl-3">PIN: {kid.pin}</span>
-                        <div className="text-xs text-gray-500 mt-1">{kid.routines.length} Routines | {kid.reminders.length} Reminders</div>
-                      </div>
-                      <button onClick={() => setEditingKid(kid)} className="bg-gray-800 hover:bg-gray-700 text-blue-400 p-3 rounded-lg transition-colors"><Edit3 size={18} /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* TAB: CHORES MASTER LIST */}
             {adminTab === 'chores' && (
               <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 flex flex-col h-full">
-                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><CheckSquare className="text-purple-400" /> Master Chore List</h3>
+                <div className="flex justify-between items-end mb-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2 mb-1"><CheckSquare className="text-purple-400" /> Master Chore List</h3>
+                    <p className="text-gray-400 text-sm">Add chores and check the boxes to assign them to one or more kids.</p>
+                  </div>
+                </div>
                 
-                {/* Add New Chore */}
-                <div className="flex flex-col md:flex-row gap-3 bg-gray-900 p-4 rounded-xl border border-gray-700 mb-6">
+                {/* Add New Chore Bar */}
+                <div className="flex flex-col md:flex-row gap-3 bg-gray-900 p-4 rounded-xl border border-gray-700 mb-8">
                   <input 
                     type="text" placeholder="e.g. Empty Dishwasher" value={newAdminChore.text}
                     onChange={e => setNewAdminChore({...newAdminChore, text: e.target.value})}
@@ -567,41 +860,135 @@ export default function App() {
                     className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500"
                   />
                   <select 
-                    value={newAdminChore.assigneeId} 
-                    onChange={e => setNewAdminChore({...newAdminChore, assigneeId: Number(e.target.value)})}
-                    className="bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none"
-                  >
-                    {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-                  </select>
-                  <select 
                     value={newAdminChore.type} 
                     onChange={e => setNewAdminChore({...newAdminChore, type: e.target.value as ChoreType})}
-                    className="bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none"
+                    className="bg-gray-800 border border-gray-700 rounded-lg p-3 text-white font-bold focus:outline-none"
                   >
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
                   </select>
-                  <button onClick={handleAdminAddChore} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center"><Plus size={20}/></button>
+                  <button onClick={handleAdminAddChore} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors">
+                    <Plus size={20}/> Add Chore
+                  </button>
                 </div>
 
-                {/* List of Chores */}
-                <div className="space-y-2 overflow-y-auto pr-2">
-                  {chores.length === 0 && <div className="text-center text-gray-500 py-4">No chores set yet. Add one above!</div>}
-                  {chores.map(chore => {
-                    const assignedKid = kids.find(k => k.id === chore.assigneeId);
-                    return (
-                      <div key={chore.id} className="flex justify-between items-center bg-gray-900 p-4 rounded-xl border border-gray-700">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-2 h-2 rounded-full ${chore.type === 'daily' ? 'bg-green-500' : 'bg-purple-500'}`} title={chore.type}></div>
-                          <span className="text-gray-100 font-semibold">{chore.text}</span>
-                          <span className={`text-xs px-2 py-1 rounded-md bg-gray-800 border ${assignedKid?.color || 'border-gray-600'} ${assignedKid?.headerColor || 'text-gray-400'}`}>
-                            {assignedKid?.name || 'Unknown'}
-                          </span>
-                        </div>
-                        <button onClick={() => handleAdminDeleteChore(chore.id)} className="text-red-400 hover:text-red-300 p-2 bg-gray-800 rounded-lg transition-colors"><X size={18} /></button>
+                {/* Daily Chores Group */}
+                <div className="mb-8">
+                  <h4 className="text-lg font-bold text-green-400 mb-3 border-b border-gray-700 pb-2 flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div> Daily Tasks
+                  </h4>
+                  {renderAdminChoreList('daily')}
+                </div>
+
+                {/* Weekly Chores Group */}
+                <div>
+                  <h4 className="text-lg font-bold text-purple-400 mb-3 border-b border-gray-700 pb-2 flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-500"></div> Weekly Tasks
+                  </h4>
+                  {renderAdminChoreList('weekly')}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: KIDS */}
+            {adminTab === 'kids' && (
+              <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Users className="text-green-400" /> Profiles & Routines</h3>
+                <p className="text-gray-400 text-sm mb-6">Manage names, PIN codes, personal daily routines, and scheduled reminders.</p>
+                <div className="grid grid-cols-1 gap-4">
+                  {kids.map(kid => (
+                    <div key={kid.id} className="bg-gray-900 p-4 rounded-xl border border-gray-700 flex justify-between items-center">
+                      <div>
+                        <span className={`font-bold ${kid.headerColor} text-lg`}>{kid.name}</span>
+                        <span className="text-gray-500 text-sm ml-3 border-l border-gray-700 pl-3">PIN: {kid.pin}</span>
+                        <div className="text-sm text-gray-500 mt-1">{kid.routines.length} Routines | {kid.reminders.length} Scheduled Reminders</div>
                       </div>
-                    );
-                  })}
+                      <button onClick={() => setEditingKid(kid)} className="bg-gray-800 hover:bg-gray-700 text-blue-400 p-3 rounded-lg transition-colors flex items-center gap-2">
+                        <Edit3 size={18} /> Edit Setup
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: LAYOUT */}
+            {adminTab === 'layout' && (
+              <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><LayoutDashboard className="text-blue-400" /> Dashboard Layout</h3>
+                 <p className="text-gray-400 text-sm mb-6">Change the order in which widgets appear on the main dashboard screen.</p>
+                 <div className="space-y-3 max-w-lg">
+                    {appSettings.dashboardLayout.map((widgetId, idx) => (
+                      <div key={widgetId} className="flex items-center justify-between bg-gray-900 p-4 rounded-xl border border-gray-700">
+                        <span className="text-lg font-bold text-gray-200">{WIDGET_TITLES[widgetId] || widgetId}</span>
+                        <div className="flex gap-2">
+                          <button 
+                             onClick={() => moveWidget(idx, -1)} 
+                             disabled={idx === 0}
+                             className="p-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-colors"
+                          >
+                             <ChevronUp size={20}/>
+                          </button>
+                          <button 
+                             onClick={() => moveWidget(idx, 1)} 
+                             disabled={idx === appSettings.dashboardLayout.length - 1}
+                             className="p-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-colors"
+                          >
+                             <ChevronDown size={20}/>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                 </div>
+              </div>
+            )}
+
+            {/* TAB: SETTINGS */}
+            {adminTab === 'settings' && (
+              <div className="space-y-6">
+                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><RotateCcw className="text-orange-400" /> System Resets</h3>
+                  <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
+                    <div className="flex items-center justify-between bg-gray-900 p-4 rounded-xl border border-gray-700 w-full md:w-1/2">
+                      <div>
+                        <span className="font-bold text-white block">Auto-Reset Dailies</span>
+                        <span className="text-gray-500 text-sm">Uncheck all daily chores at midnight</span>
+                      </div>
+                      <button 
+                        onClick={toggleAutoReset}
+                        className={`w-14 h-8 rounded-full transition-colors relative ${appSettings.autoResetDailies ? 'bg-green-500' : 'bg-gray-600'}`}
+                      >
+                        <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-transform ${appSettings.autoResetDailies ? 'translate-x-7' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+                    <button onClick={handleResetDailies} className="bg-gray-900 hover:bg-gray-700 border border-gray-700 text-orange-400 px-6 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors w-full md:w-auto justify-center">
+                      <RotateCcw size={20} /> Force Reset Dailies Now
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><CloudSun className="text-blue-400" /> Weather Settings</h3>
+                  <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
+                     <div className="w-full md:w-2/3">
+                        <label className="block text-sm font-bold text-gray-400 mb-2">Location (City Name)</label>
+                        <div className="flex gap-3">
+                          <input 
+                             type="text" 
+                             placeholder="e.g. Seattle or London" 
+                             value={weatherInput}
+                             onChange={(e) => setWeatherInput(e.target.value)}
+                             onKeyDown={(e) => e.key === 'Enter' && handleSaveWeatherSetting()}
+                             className="flex-1 bg-gray-900 border border-gray-700 rounded-xl p-4 text-white focus:outline-none focus:border-blue-500"
+                          />
+                          <button onClick={handleSaveWeatherSetting} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-bold transition-colors">
+                            Save
+                          </button>
+                        </div>
+                        {weatherStatus && <p className={`text-sm mt-3 font-bold ${weatherStatus.includes('Found') ? 'text-green-400' : 'text-orange-400'}`}>{weatherStatus}</p>}
+                        {!weatherStatus && <p className="text-gray-500 text-sm mt-2">Open-Meteo's free API requires a city name for best results. Clear and save to disable.</p>}
+                     </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -643,9 +1030,10 @@ export default function App() {
 
               {/* Routines Editor */}
               <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-                <h3 className="font-bold text-white mb-3 flex items-center gap-2">Personal Routines</h3>
-                <p className="text-gray-400 text-sm mb-4">These show up at the bottom of their card so they don't forget the basics.</p>
+                <h3 className="font-bold text-white mb-1 flex items-center gap-2">Personal Routines</h3>
+                <p className="text-gray-400 text-sm mb-4">Static items that appear at the bottom of their card.</p>
                 <div className="space-y-2 mb-4">
+                  {editingKid.routines.length === 0 && <span className="text-gray-500 italic text-sm">No routines set.</span>}
                   {editingKid.routines.map((routine, idx) => (
                     <div key={idx} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700">
                       <span className="text-gray-200">{routine}</span>
@@ -657,33 +1045,47 @@ export default function App() {
                   <input 
                     type="text" placeholder="e.g. Pack Lunchbox" value={newItemText.routine}
                     onChange={e => setNewItemText({...newItemText, routine: e.target.value})}
-                    onKeyDown={e => e.key === 'Enter' && handleAddItem('routines')}
+                    onKeyDown={e => e.key === 'Enter' && handleAddRoutine()}
                     className="flex-1 bg-gray-900 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-blue-500"
                   />
-                  <button onClick={() => handleAddItem('routines')} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold flex items-center"><Plus size={20}/></button>
+                  <button onClick={handleAddRoutine} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold flex items-center"><Plus size={20}/></button>
                 </div>
               </div>
 
               {/* Reminders Editor */}
               <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-                <h3 className="font-bold text-white mb-3 flex items-center gap-2">Dashboard Reminders</h3>
-                <p className="text-gray-400 text-sm mb-4">These will show up on the main Dashboard for the whole family to see.</p>
-                <div className="space-y-2 mb-4">
-                  {editingKid.reminders.map((reminder, idx) => (
-                    <div key={idx} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700">
-                      <span className="text-gray-200">{reminder}</span>
-                      <button onClick={() => handleRemoveItem('reminders', idx)} className="text-red-400 hover:text-red-300 p-1"><X size={18} /></button>
+                <h3 className="font-bold text-white mb-1 flex items-center gap-2">Scheduled Reminders</h3>
+                <p className="text-gray-400 text-sm mb-4">Select the days these should appear on the main Dashboard.</p>
+                <div className="space-y-3 mb-4">
+                  {editingKid.reminders.length === 0 && <span className="text-gray-500 italic text-sm">No reminders set.</span>}
+                  {editingKid.reminders.map((reminder) => (
+                    <div key={reminder.id} className="bg-gray-900 p-3 rounded-lg border border-gray-700">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-gray-200 font-semibold">{reminder.text}</span>
+                        <button onClick={() => handleRemoveReminder(reminder.id)} className="text-red-400 hover:text-red-300 p-1"><X size={18} /></button>
+                      </div>
+                      <div className="flex gap-1.5">
+                        {DAYS_OF_WEEK.map((day, idx) => (
+                          <button 
+                            key={idx}
+                            onClick={() => toggleReminderDay(reminder.id, idx)}
+                            className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${reminder.days.includes(idx) ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                          >
+                            {day}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
                 <div className="flex gap-2">
                   <input 
-                    type="text" placeholder="e.g. Tuesday: Bring Cello" value={newItemText.reminder}
+                    type="text" placeholder="e.g. Bring Cello" value={newItemText.reminder}
                     onChange={e => setNewItemText({...newItemText, reminder: e.target.value})}
-                    onKeyDown={e => e.key === 'Enter' && handleAddItem('reminders')}
+                    onKeyDown={e => e.key === 'Enter' && handleAddReminder()}
                     className="flex-1 bg-gray-900 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-blue-500"
                   />
-                  <button onClick={() => handleAddItem('reminders')} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold flex items-center"><Plus size={20}/></button>
+                  <button onClick={handleAddReminder} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold flex items-center"><Plus size={20}/></button>
                 </div>
               </div>
 
@@ -692,18 +1094,18 @@ export default function App() {
             {/* Footer */}
             <div className="p-6 border-t border-gray-800 bg-gray-900 rounded-b-3xl flex justify-end gap-3">
               <button onClick={() => setEditingKid(null)} className="px-6 py-3 rounded-xl font-bold text-gray-300 hover:text-white transition-colors">Cancel</button>
-              <button onClick={handleSaveKid} className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-colors"><Save size={20}/> Save</button>
+              <button onClick={handleSaveKid} className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-colors"><Save size={20}/> Save Changes</button>
             </div>
 
           </div>
         </div>
       )}
 
-      {/* PIN MODAL */}
+      {/* PIN MODAL (Now dedicated to authenticating into the Kid Dashboard) */}
       {pinModal.isOpen && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-700 rounded-3xl p-8 shadow-2xl max-w-sm w-full mx-4">
-            <div className="text-center mb-6"><Lock className="mx-auto text-blue-400 mb-2" size={32} /><h2 className="text-2xl font-bold text-white">Enter PIN</h2><p className="text-gray-400 mt-1">{kids.find(k => k.id === pinModal.kidId)?.name}'s chore</p></div>
+            <div className="text-center mb-6"><Lock className="mx-auto text-blue-400 mb-2" size={32} /><h2 className="text-2xl font-bold text-white">Enter PIN</h2><p className="text-gray-400 mt-1">{kids.find(k => k.id === pinModal.kidId)?.name}'s Profile</p></div>
             <div className={`flex justify-center gap-4 mb-8 ${pinError ? 'animate-bounce' : ''}`}>
               {[0, 1, 2, 3].map(i => (<div key={i} className={`w-4 h-4 rounded-full transition-all ${i < enteredPin.length ? 'bg-blue-500 scale-110' : 'bg-gray-700'} ${pinError ? 'bg-red-500' : ''}`} />))}
             </div>
@@ -711,7 +1113,7 @@ export default function App() {
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (<button key={num} onClick={() => handlePinPadClick(num.toString())} className="bg-gray-800 hover:bg-gray-700 text-2xl font-bold text-white py-4 rounded-2xl transition-colors active:scale-95">{num}</button>))}
               <div className="col-span-1"></div>
               <button onClick={() => handlePinPadClick('0')} className="bg-gray-800 hover:bg-gray-700 text-2xl font-bold text-white py-4 rounded-2xl transition-colors active:scale-95">0</button>
-              <button onClick={() => setPinModal({ isOpen: false, kidId: null, choreId: null })} className="text-gray-400 hover:text-white font-semibold py-4 transition-colors">Cancel</button>
+              <button onClick={() => setPinModal({ isOpen: false, kidId: null })} className="text-gray-400 hover:text-white font-semibold py-4 transition-colors">Cancel</button>
             </div>
           </div>
         </div>
