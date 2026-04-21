@@ -186,6 +186,7 @@ export default function App() {
   const [editingKid, setEditingKid] = useState<Kid | null>(null);
   const [newItemText, setNewItemText] = useState({ routine: '', reminder: '' });
   const [newAdminChore, setNewAdminChore] = useState({ text: '', type: 'daily' as ChoreType });
+  const [editingChoreId, setEditingChoreId] = useState<string | null>(null);
 
   // --- DATABASE SYNC ---
   useEffect(() => {
@@ -519,12 +520,20 @@ export default function App() {
           return (
             <div key={chore.id} className={`flex items-center gap-4 p-3 rounded-xl border transition-colors ${isUnassigned ? 'bg-red-900/20 border-red-500/50 hover:bg-red-900/30' : 'bg-gray-900 border-gray-700 hover:bg-gray-800'}`}>
               <div className={`w-2 h-2 rounded-full ${chore.type === 'daily' ? 'bg-green-500' : 'bg-purple-500'} flex-shrink-0`} title={chore.type}></div>
-              <input 
-                value={chore.text}
-                onChange={e => handleChoreTextChange(chore.id, e.target.value)}
-                onBlur={handleChoreTextBlur}
-                className="flex-1 bg-transparent text-white font-semibold focus:outline-none focus:border-b focus:border-blue-500 px-1 py-1 min-w-[100px]"
-              />
+              
+              {editingChoreId === chore.id ? (
+                <input 
+                  autoFocus
+                  value={chore.text}
+                  onChange={e => handleChoreTextChange(chore.id, e.target.value)}
+                  onBlur={() => { handleChoreTextBlur(); setEditingChoreId(null); }}
+                  onKeyDown={e => e.key === 'Enter' && setEditingChoreId(null)}
+                  className="flex-1 bg-gray-800 text-white font-semibold focus:outline-none border border-blue-500 rounded px-2 py-1 min-w-[100px]"
+                />
+              ) : (
+                <span className="flex-1 text-white font-semibold px-1 py-1 truncate">{chore.text}</span>
+              )}
+              
               <div className="flex gap-4">
                 {kids.map(kid => (
                   <div key={kid.id} className="flex flex-col items-center justify-center w-16 sm:w-24">
@@ -535,7 +544,21 @@ export default function App() {
                   </div>
                 ))}
               </div>
-              <button onClick={() => handleAdminDeleteChore(chore.id)} className="text-red-400 hover:text-red-300 p-2 hover:bg-red-900/30 rounded-lg transition-colors flex-shrink-0"><X size={18} /></button>
+              
+              <div className="flex gap-1 flex-shrink-0">
+                {editingChoreId === chore.id ? (
+                  <button onMouseDown={(e) => e.preventDefault()} onClick={() => setEditingChoreId(null)} className="text-green-400 hover:text-green-300 p-2 hover:bg-green-900/30 rounded-lg transition-colors">
+                    <Save size={18} />
+                  </button>
+                ) : (
+                  <button onClick={() => setEditingChoreId(chore.id)} className="text-blue-400 hover:text-blue-300 p-2 hover:bg-blue-900/30 rounded-lg transition-colors">
+                    <Edit3 size={18} />
+                  </button>
+                )}
+                <button onClick={() => handleAdminDeleteChore(chore.id)} className="text-red-400 hover:text-red-300 p-2 hover:bg-red-900/30 rounded-lg transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
           );
         })}
@@ -603,9 +626,9 @@ export default function App() {
         
         <div className="flex-1 overflow-y-auto pr-2 pb-4">
            {/* DAILY SECTION */}
-           <div className="mb-8 border-b border-gray-800 pb-6">
-              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-6 text-center">Daily Tasks</h3>
-              <div className="grid grid-cols-2 gap-y-8 gap-x-2 place-content-center mb-8">
+           <div className="mb-4 border-b border-gray-800 pb-4">
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3 text-center">Daily Tasks</h3>
+              <div className="grid grid-cols-2 gap-y-3 gap-x-2 place-content-center mb-4">
                 {kids.map(kid => (
                    <SmallProgressRing 
                      key={`d-${kid.id}`} 
@@ -629,8 +652,8 @@ export default function App() {
 
            {/* WEEKLY SECTION */}
            <div>
-              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-6 text-center">Weekly Tasks</h3>
-              <div className="grid grid-cols-2 gap-y-8 gap-x-2 place-content-center mb-8">
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3 text-center">Weekly Tasks</h3>
+              <div className="grid grid-cols-2 gap-y-3 gap-x-2 place-content-center mb-4">
                 {kids.map(kid => (
                    <SmallProgressRing 
                      key={`w-${kid.id}`} 
@@ -706,31 +729,31 @@ export default function App() {
         const kidTodayReminders = kid.reminders.filter(r => r.days.includes(todayDayIndex));
 
         return (
-          <div className={`bg-gray-900 border-t-8 ${kid.color} rounded-3xl p-8 shadow-xl min-h-[80vh] flex flex-col`}>
-            <h2 className={`text-4xl font-bold ${kid.headerColor} mb-8 border-b border-gray-800 pb-4`}>
+          <div className={`bg-gray-900 border-t-8 ${kid.color} rounded-3xl p-6 shadow-xl min-h-[80vh] flex flex-col`}>
+            <h2 className={`text-3xl font-bold ${kid.headerColor} mb-6 border-b border-gray-800 pb-4`}>
               Welcome, {kid.name}!
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 flex-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 flex-1">
               
               {/* LEFT COLUMN: CHORES */}
-              <div className="space-y-10 border-r border-gray-800 pr-8">
+              <div className="space-y-6 border-r border-gray-800 pr-6">
                 {/* Daily Chores */}
                 <div>
-                  <h3 className="text-xl font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <ListTodo className="text-green-500"/> Daily To-Do
                   </h3>
-                  <div className="space-y-4">
-                    {kidDaily.length === 0 && <div className="text-gray-600 italic text-lg">No daily chores assigned.</div>}
+                  <div className="space-y-3">
+                    {kidDaily.length === 0 && <div className="text-gray-600 italic text-base">No daily chores assigned.</div>}
                     {kidDaily.map(chore => {
                       const isDone = chore.completedBy.includes(kid.id);
                       return (
                         <div key={chore.id} onClick={() => toggleKidChore(chore.id, kid.id)}
-                          className={`p-6 rounded-2xl flex items-center justify-between transition-all cursor-pointer border-2 ${isDone ? 'bg-gray-800 opacity-60 border-gray-700' : 'bg-gray-800 hover:bg-gray-750 border-gray-600 hover:border-gray-500'}`}
+                          className={`p-4 rounded-2xl flex items-center justify-between transition-all cursor-pointer border-2 ${isDone ? 'bg-gray-800 opacity-60 border-gray-700' : 'bg-gray-800 hover:bg-gray-750 border-gray-600 hover:border-gray-500'}`}
                         >
-                          <span className={`text-2xl font-semibold ${isDone ? 'line-through text-gray-500' : 'text-gray-100'}`}>{chore.text}</span>
-                          <div className={`w-8 h-8 rounded-full border-4 flex items-center justify-center transition-colors ${isDone ? 'border-green-500 bg-green-500 text-gray-900' : 'border-gray-500'}`}>
-                            {isDone && <CheckCircle size={20} strokeWidth={3} />}
+                          <span className={`text-xl font-semibold ${isDone ? 'line-through text-gray-500' : 'text-gray-100'}`}>{chore.text}</span>
+                          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-colors ${isDone ? 'border-green-500 bg-green-500 text-gray-900' : 'border-gray-500'}`}>
+                            {isDone && <CheckCircle size={18} strokeWidth={2.5} />}
                           </div>
                         </div>
                       );
@@ -740,20 +763,42 @@ export default function App() {
 
                 {/* Weekly Chores */}
                 <div>
-                  <h3 className="text-xl font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <ListTodo className="text-purple-500" /> Weekly Deep Clean
                   </h3>
-                  <div className="space-y-4">
-                    {kidWeekly.length === 0 && <div className="text-gray-600 italic text-lg">No weekly chores assigned.</div>}
+                  <div className="space-y-3">
+                    {kidWeekly.length === 0 && <div className="text-gray-600 italic text-base">No weekly chores assigned.</div>}
                     {kidWeekly.map(chore => {
                       const isDone = chore.completedBy.includes(kid.id);
+                      
+                      // Calculate who else is assigned to this chore
+                      const coAssigneeIds = chore.assigneeIds.filter(id => id !== kid.id);
+                      const coAssigneeNames = coAssigneeIds.map(id => kids.find(k => k.id === id)?.name).filter(Boolean);
+                      
+                      let withText = "";
+                      if (coAssigneeNames.length === 1) {
+                        withText = `with ${coAssigneeNames[0]}`;
+                      } else if (coAssigneeNames.length === 2) {
+                        withText = `with ${coAssigneeNames[0]} & ${coAssigneeNames[1]}`;
+                      } else if (coAssigneeNames.length > 2) {
+                        const last = coAssigneeNames.pop();
+                        withText = `with ${coAssigneeNames.join(', ')}, & ${last}`;
+                      }
+
                       return (
                         <div key={chore.id} onClick={() => toggleKidChore(chore.id, kid.id)}
-                          className={`p-6 rounded-2xl flex items-center justify-between transition-all cursor-pointer border-2 ${isDone ? 'bg-gray-800 opacity-60 border-gray-700' : 'bg-gray-800 hover:bg-gray-750 border-gray-600 hover:border-gray-500'}`}
+                          className={`p-4 rounded-2xl flex items-center justify-between transition-all cursor-pointer border-2 ${isDone ? 'bg-gray-800 opacity-60 border-gray-700' : 'bg-gray-800 hover:bg-gray-750 border-gray-600 hover:border-gray-500'}`}
                         >
-                          <span className={`text-2xl font-semibold ${isDone ? 'line-through text-gray-500' : 'text-gray-100'}`}>{chore.text}</span>
-                          <div className={`w-8 h-8 rounded-full border-4 flex items-center justify-center transition-colors ${isDone ? 'border-purple-500 bg-purple-500 text-gray-900' : 'border-gray-500'}`}>
-                            {isDone && <CheckCircle size={20} strokeWidth={3} />}
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className={`text-xl font-semibold ${isDone ? 'line-through text-gray-500' : 'text-gray-100'}`}>{chore.text}</span>
+                            {withText && (
+                              <span className={`text-base font-medium italic ${isDone ? 'text-gray-600' : 'text-gray-400'}`}>
+                                ({withText})
+                              </span>
+                            )}
+                          </div>
+                          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0 ${isDone ? 'border-purple-500 bg-purple-500 text-gray-900' : 'border-gray-500'}`}>
+                            {isDone && <CheckCircle size={18} strokeWidth={2.5} />}
                           </div>
                         </div>
                       );
@@ -763,20 +808,20 @@ export default function App() {
               </div>
 
               {/* RIGHT COLUMN: ROUTINES & REMINDERS */}
-              <div className="space-y-8">
+              <div className="space-y-6">
                 {/* Reminders */}
-                <div className="bg-gray-800/40 p-8 rounded-3xl border border-gray-800">
-                  <h3 className="text-xl font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                <div className="bg-gray-800/40 p-6 rounded-2xl border border-gray-800">
+                  <h3 className="text-lg font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <AlertCircle className="text-orange-500" /> Today's Focus
                   </h3>
                   {kidTodayReminders.length === 0 ? (
-                    <span className="text-gray-600 italic text-lg">No special reminders today.</span>
+                    <span className="text-gray-600 italic text-base">No special reminders today.</span>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {kidTodayReminders.map(rem => (
-                        <div key={rem.id} className="flex items-start gap-4 bg-gray-800 p-5 rounded-2xl">
-                           <div className={`w-3 h-3 rounded-full mt-2 flex-shrink-0 ${kid.color.replace('border-', 'bg-').replace('-500', '-500')}`}></div>
-                           <span className="text-xl text-gray-200">{rem.text}</span>
+                        <div key={rem.id} className="flex items-start gap-4 bg-gray-800 p-4 rounded-xl">
+                           <div className={`w-2.5 h-2.5 rounded-full mt-2 flex-shrink-0 ${kid.color.replace('border-', 'bg-').replace('-500', '-500')}`}></div>
+                           <span className="text-lg text-gray-200">{rem.text}</span>
                         </div>
                       ))}
                     </div>
@@ -784,17 +829,17 @@ export default function App() {
                 </div>
 
                 {/* Routines */}
-                <div className="bg-gray-800/40 p-8 rounded-3xl border border-gray-800">
-                  <h3 className="text-xl font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                <div className="bg-gray-800/40 p-6 rounded-2xl border border-gray-800">
+                  <h3 className="text-lg font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <RotateCcw className="text-blue-500"/> Core Routines
                   </h3>
                   {kid.routines.length === 0 ? (
-                    <span className="text-gray-600 italic text-lg">No routines set.</span>
+                    <span className="text-gray-600 italic text-base">No routines set.</span>
                   ) : (
-                    <ul className="list-none space-y-4">
+                    <ul className="list-none space-y-3">
                       {kid.routines.map((routine, idx) => (
-                        <li key={idx} className="text-xl text-gray-300 flex items-center gap-3">
-                          <div className="w-2 h-2 bg-gray-600 rounded-full"></div>
+                        <li key={idx} className="text-lg text-gray-300 flex items-center gap-3">
+                          <div className="w-1.5 h-1.5 bg-gray-600 rounded-full"></div>
                           {routine}
                         </li>
                       ))}
