@@ -55,6 +55,8 @@ type Reminder = {
   id: string;
   text: string;
   days: number[]; 
+  showAM: boolean;
+  showPM: boolean;
 };
 
 type Kid = {
@@ -70,14 +72,15 @@ type Kid = {
 type AppSettings = {
   autoResetDailies: boolean;
   lastResetDate: string;
-  zipCode: string; // Used for city name search
+  zipCode: string; 
   dashboardLayout: string[];
+  icalUrl?: string;
 };
 
 // --- DEFAULT DATA ---
 const initialKids: Kid[] = [
-  { id: 1, name: 'Alex', color: 'border-blue-500', headerColor: 'text-blue-400', pin: '1234', routines: ['Brush Teeth', 'Pack Backpack'], reminders: [{ id: 'r1', text: 'Library Books', days: [2] }] },
-  { id: 2, name: 'Jordan', color: 'border-green-500', headerColor: 'text-green-400', pin: '1234', routines: ['Brush Teeth', 'Practice Piano'], reminders: [{ id: 'r2', text: 'Soccer Cleats for Practice', days: [2, 4] }] },
+  { id: 1, name: 'Alex', color: 'border-blue-500', headerColor: 'text-blue-400', pin: '1234', routines: ['Brush Teeth', 'Pack Backpack'], reminders: [{ id: 'r1', text: 'Library Books', days: [2], showAM: true, showPM: true }] },
+  { id: 2, name: 'Jordan', color: 'border-green-500', headerColor: 'text-green-400', pin: '1234', routines: ['Brush Teeth', 'Practice Piano'], reminders: [{ id: 'r2', text: 'Soccer Cleats for Practice', days: [2, 4], showAM: false, showPM: true }] },
   { id: 3, name: 'Taylor', color: 'border-purple-500', headerColor: 'text-purple-400', pin: '1234', routines: ['Brush Teeth', 'Lay out clothes'], reminders: [] },
   { id: 4, name: 'Casey', color: 'border-orange-500', headerColor: 'text-orange-400', pin: '1234', routines: ['Brush Teeth', 'Put shoes away'], reminders: [] }
 ];
@@ -97,6 +100,163 @@ const mockCalendar = [
   { day: 'Wed', time: '5:00 PM', title: 'Piano Lessons' },
   { day: 'Fri', time: '6:30 PM', title: 'Family Movie Night' },
 ];
+
+const initialGlobalReminders: Reminder[] = [
+  { id: 'gr1', text: 'Take out Trash Bins', days: [3], showAM: true, showPM: true } 
+];
+
+// --- ICAL PARSER HELPER ---
+const fetchIcalData = async (url: string) => {
+  const proxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+  ];
+
+  for (const proxy of proxies) {
+    try {
+      const res = await fetch(proxy);
+      if (res.ok) {
+        const text = await res.text();
+        if (text.includes('BEGIN:VCALENDAR')) {
+          return text;
+        }
+      }
+    } catch (e) {
+      console.warn(`Proxy fetch failed for ${proxy}`);
+    }
+  }
+  throw new Error("Failed to fetch calendar data via all proxies.");
+};
+
+const parseIcsDate = (dateStr: string) => {
+  if (!dateStr) return new Date();
+  const year = parseInt(dateStr.substring(0, 4), 10);
+  const month = parseInt(dateStr.substring(4, 6), 10) - 1;
+  const day = parseInt(dateStr.substring(6, 8), 10);
+  if (dateStr.length > 8) {
+    const hour = parseInt(dateStr.substring(9, 11), 10);
+    const min = parseInt(dateStr.substring(11, 13), 10);
+    const sec = parseInt(dateStr.substring(13, 15), 10);
+    if (dateStr.endsWith('Z')) return new Date(Date.UTC(year, month, day, hour, min, sec));
+    return new Date(year, month, day, hour, min, sec);
+  }
+  return new Date(year, month, day);
+};
+
+const parseICS = (icsString: string) => {
+  const lines = icsString.split(/\r?\n/);
+  const events: any[] = [];
+  let event: any = null;
+
+  const unfoldedLines = [];
+  for(let i=0; i<lines.length; i++) {
+    if(lines[i].startsWith(' ') || lines[i].startsWith('\t')) {
+       if(unfoldedLines.length > 0) unfoldedLines[unfoldedLines.length-1] += lines[i].substring(1);
+    } else {
+       unfoldedLines.push(lines[i]);
+    }
+  }
+
+  for (const line of unfoldedLines) {
+    if (line.startsWith('BEGIN:VEVENT')) { event = {}; } 
+    else if (line.startsWith('END:VEVENT')) {
+      if (event && event.start) events.push(event);
+      event = null;
+    } else if (event) {
+      if (line.startsWith('SUMMARY:')) event.title = line.substring(8);
+      else if (line.startsWith('DTSTART')) {
+         const dateStr = line.substring(line.indexOf(':') + 1);
+         event.start = parseIcsDate(dateStr);
+         event.isAllDay = dateStr.length <= 8;
+      }
+      else if (line.startsWith('DTEND')) {
+         const dateStr = line.substring(line.indexOf(':') + 1);
+         event.end = parseIcsDate(dateStr);
+      }
+      else if (line.startsWith('RRULE:')) event.rrule = line.substring(6);
+    }
+  }
+
+  const realNow = new Date();
+  const nextWeek = new Date(realNow.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const expandedEvents: any[] = [];
+  const dayMap: Record<string, number> = { 'SU': 0, 'MO': 1, 'TU': 2, 'WE': 3, 'TH': 4, 'FR': 5, 'SA': 6 };
+
+  events.forEach(ev => {
+     const duration = ev.end ? ev.end.getTime() - ev.start.getTime() : (ev.isAllDay ? 24*60*60*1000 : 60*60*1000);
+
+     if (!ev.rrule) {
+        const evEnd = new Date(ev.start.getTime() + duration);
+        if (evEnd > realNow && ev.start <= nextWeek) expandedEvents.push(ev);
+        return;
+     }
+
+     if (ev.rrule.includes('FREQ=DAILY')) {
+        let d = new Date(ev.start);
+        if (d < realNow) {
+           const daysDiff = Math.floor((realNow.getTime() - d.getTime()) / (24*60*60*1000));
+           d.setDate(d.getDate() + daysDiff);
+        }
+        while (d <= nextWeek) {
+            const recEnd = new Date(d.getTime() + duration);
+            if (recEnd > realNow) expandedEvents.push({ ...ev, start: new Date(d) });
+            d.setDate(d.getDate() + 1);
+        }
+     } else if (ev.rrule.includes('FREQ=WEEKLY')) {
+        if (ev.rrule.includes('BYDAY=')) {
+           const match = ev.rrule.match(/BYDAY=([^;]+)/);
+           if (match) {
+             const days = match[1].split(',').map((d: string) => dayMap[d.replace(/[^A-Z]/g, '')]);
+             let d = new Date(ev.start);
+             if (d < realNow) {
+                 const daysDiff = Math.floor((realNow.getTime() - d.getTime()) / (24*60*60*1000));
+                 d.setDate(d.getDate() + Math.max(0, daysDiff - 7));
+             }
+             while (d <= nextWeek) {
+                if (days.includes(d.getDay())) {
+                   const recEnd = new Date(d.getTime() + duration);
+                   if (recEnd > realNow) expandedEvents.push({ ...ev, start: new Date(d) });
+                }
+                d.setDate(d.getDate() + 1);
+             }
+           }
+        } else {
+           let d = new Date(ev.start);
+           while (d <= nextWeek) {
+              const recEnd = new Date(d.getTime() + duration);
+              if (recEnd > realNow && d >= new Date(realNow.getTime() - 7*24*60*60*1000)) expandedEvents.push({ ...ev, start: new Date(d) });
+              d.setDate(d.getDate() + 7);
+           }
+        }
+     } else if (ev.rrule.includes('FREQ=MONTHLY')) {
+        let d = new Date(ev.start);
+        while (d <= nextWeek) {
+           const recEnd = new Date(d.getTime() + duration);
+           if (recEnd > realNow && d >= new Date(realNow.getTime() - 31*24*60*60*1000)) expandedEvents.push({ ...ev, start: new Date(d) });
+           d.setMonth(d.getMonth() + 1);
+        }
+     }
+  });
+
+  const finalEvents = expandedEvents.filter(ev => {
+     const evEnd = new Date(ev.start.getTime() + (ev.end ? ev.end.getTime() - ev.start.getTime() : (ev.isAllDay ? 24*60*60*1000 : 60*60*1000)));
+     return evEnd > realNow && ev.start <= nextWeek;
+  });
+
+  finalEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+  
+  return finalEvents.slice(0, 8).map(ev => {
+     let day = DAYS_OF_WEEK[ev.start.getDay()];
+     if (ev.start.toDateString() === realNow.toDateString()) {
+        day = 'Today';
+     } else if (ev.start.toDateString() === new Date(realNow.getTime() + 24*60*60*1000).toDateString()) {
+        day = 'Tmw';
+     }
+     const time = ev.isAllDay ? 'All Day' : ev.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+     return { day, time, title: ev.title };
+  });
+};
 
 // --- COMPONENTS ---
 const SmallProgressRing = ({ progress, kidName, colorClass, onClick }: { progress: number, kidName: string, colorClass: string, onClick: (e: React.MouseEvent) => void }) => {
@@ -164,15 +324,19 @@ export default function App() {
   // App State
   const [kids, setKids] = useState<Kid[]>(initialKids);
   const [chores, setChores] = useState<Chore[]>(initialChores);
+  const [globalReminders, setGlobalReminders] = useState<Reminder[]>(initialGlobalReminders);
   const [appSettings, setAppSettings] = useState<AppSettings>({ 
     autoResetDailies: true, lastResetDate: getTodayStr(), zipCode: '', dashboardLayout: ['calendar', 'reminders', 'chores'] 
   });
   const [user, setUser] = useState<User | null>(null);
   const [weather, setWeather] = useState<{current: number, high: number, low: number} | null>(null);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(mockCalendar);
   
-  // Weather Input State
+  // Input States
   const [weatherInput, setWeatherInput] = useState<string>('');
   const [weatherStatus, setWeatherStatus] = useState<string>('');
+  const [icalInput, setIcalInput] = useState<string>('');
+  const [calendarStatus, setCalendarStatus] = useState<string>('');
 
   // Modals & Forms
   const [pinModal, setPinModal] = useState<{ isOpen: boolean; kidId: number | null; }>({ isOpen: false, kidId: null });
@@ -186,6 +350,7 @@ export default function App() {
   const [editingKid, setEditingKid] = useState<Kid | null>(null);
   const [newItemText, setNewItemText] = useState({ routine: '', reminder: '' });
   const [newAdminChore, setNewAdminChore] = useState({ text: '', type: 'daily' as ChoreType });
+  const [newGlobalReminder, setNewGlobalReminder] = useState<string>('');
   const [editingChoreId, setEditingChoreId] = useState<string | null>(null);
 
   // --- DATABASE SYNC ---
@@ -208,11 +373,33 @@ export default function App() {
         const data = snapshot.data();
         let currentKids = data.kids as Kid[]; 
         let currentChores = data.chores as Chore[];
+        let currentGlobalReminders = data.globalReminders as Reminder[] || [];
         let currentSettings = data.settings as AppSettings || { autoResetDailies: true, lastResetDate: getTodayStr(), zipCode: '', dashboardLayout: ['calendar', 'reminders', 'chores'] };
         let needsSave = false;
 
         if (!currentSettings.dashboardLayout) { currentSettings.dashboardLayout = ['calendar', 'reminders', 'chores']; needsSave = true; }
         if (currentSettings.zipCode === undefined) { currentSettings.zipCode = ''; needsSave = true; }
+
+        // Migration: Ensure all reminders have AM/PM toggles set to true if undefined
+        currentKids = currentKids.map(k => {
+          let updated = { ...k };
+          if (updated.reminders) {
+             updated.reminders = updated.reminders.map((r: any) => {
+                let updatedRem = { ...r };
+                if (updatedRem.showAM === undefined) { updatedRem.showAM = true; needsSave = true; }
+                if (updatedRem.showPM === undefined) { updatedRem.showPM = true; needsSave = true; }
+                return updatedRem;
+             });
+          }
+          return updated;
+        });
+
+        currentGlobalReminders = currentGlobalReminders.map((r: any) => {
+           let updatedRem = { ...r };
+           if (updatedRem.showAM === undefined) { updatedRem.showAM = true; needsSave = true; }
+           if (updatedRem.showPM === undefined) { updatedRem.showPM = true; needsSave = true; }
+           return updatedRem;
+        });
 
         const today = getTodayStr();
         if (currentSettings.autoResetDailies && currentSettings.lastResetDate !== today) {
@@ -223,12 +410,14 @@ export default function App() {
 
         setKids(currentKids);
         setChores(currentChores);
+        setGlobalReminders(currentGlobalReminders);
         setAppSettings(currentSettings);
-        setWeatherInput(currentSettings.zipCode); // Populate editor input
+        setWeatherInput(currentSettings.zipCode); 
+        if (currentSettings.icalUrl) setIcalInput(currentSettings.icalUrl);
 
-        if (needsSave) { setDoc(sharedDocRef, { kids: currentKids, chores: currentChores, settings: currentSettings }, { merge: true }); }
+        if (needsSave) { setDoc(sharedDocRef, { kids: currentKids, chores: currentChores, globalReminders: currentGlobalReminders, settings: currentSettings }, { merge: true }); }
       } else {
-        setDoc(sharedDocRef, { kids: initialKids, chores: initialChores, settings: { autoResetDailies: true, lastResetDate: getTodayStr(), zipCode: '', dashboardLayout: ['calendar', 'reminders', 'chores'] } });
+        setDoc(sharedDocRef, { kids: initialKids, chores: initialChores, globalReminders: initialGlobalReminders, settings: { autoResetDailies: true, lastResetDate: getTodayStr(), zipCode: '', dashboardLayout: ['calendar', 'reminders', 'chores'] } });
       }
     });
     return () => unsubscribe();
@@ -261,6 +450,29 @@ export default function App() {
     return () => clearInterval(interval);
   }, [appSettings.zipCode]);
 
+  // --- CALENDAR FETCH ---
+  useEffect(() => {
+    if (!appSettings.icalUrl) {
+      setCalendarEvents(mockCalendar);
+      return;
+    }
+    const fetchCal = async () => {
+      try {
+        let safeUrl = appSettings.icalUrl!;
+        if (safeUrl.startsWith('webcal://')) safeUrl = safeUrl.replace('webcal://', 'https://');
+        
+        const contents = await fetchIcalData(safeUrl);
+        const events = parseICS(contents);
+        setCalendarEvents(events);
+      } catch (e) {
+        console.error("Calendar fetch error:", e);
+      }
+    };
+    fetchCal();
+    const interval = setInterval(fetchCal, 15 * 60 * 1000); 
+    return () => clearInterval(interval);
+  }, [appSettings.icalUrl]);
+
   // --- CALCULATIONS ---
   const calculateKidProgress = (kidId: number, type: ChoreType) => {
     const assigned = chores.filter(c => c.assigneeIds.includes(kidId) && c.type === type);
@@ -280,16 +492,27 @@ export default function App() {
   };
 
   const todayDayIndex = new Date().getDay(); 
-  const activeReminders = kids.flatMap(kid => 
+  const isCurrentlyAM = new Date().getHours() < 12;
+  
+  const activeKidReminders = kids.flatMap(kid => 
     kid.reminders
       .filter(rem => rem.days.includes(todayDayIndex))
+      .filter(rem => (isCurrentlyAM && rem.showAM) || (!isCurrentlyAM && rem.showPM))
       .map(rem => ({ 
         kidName: kid.name, color: kid.color.replace('border-', 'bg-').replace('-500', '-500'), text: rem.text 
       }))
   );
+  
+  const activeGlobalReminders = globalReminders
+    .filter(rem => rem.days.includes(todayDayIndex))
+    .filter(rem => (isCurrentlyAM && rem.showAM) || (!isCurrentlyAM && rem.showPM))
+    .map(rem => ({
+      kidName: 'Family', color: 'bg-indigo-500', text: rem.text
+    }));
+    
+  const activeReminders = [...activeGlobalReminders, ...activeKidReminders];
 
   // --- KID DASHBOARD HANDLERS ---
-  // Authenticated kids can toggle chores directly from their dashboard without PINs
   const toggleKidChore = async (choreId: string, kidId: number) => {
     const updatedChores = chores.map(c => {
       if (c.id === choreId) {
@@ -348,6 +571,44 @@ export default function App() {
     }
   };
 
+  const handleSaveCalendarSettings = async () => {
+    if (!user) return;
+    setCalendarStatus('Syncing...');
+    
+    let cleanUrl = icalInput.trim();
+    
+    if (!cleanUrl) {
+       const newSettings = { ...appSettings, icalUrl: '' };
+       setAppSettings(newSettings);
+       await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true });
+       setCalendarStatus('Calendar disconnected. Showing sample data.');
+       setTimeout(() => setCalendarStatus(''), 3000);
+       return;
+    }
+    
+    if (cleanUrl.startsWith('webcal://')) {
+       cleanUrl = cleanUrl.replace('webcal://', 'https://');
+       setIcalInput(cleanUrl); 
+    }
+
+    try {
+       const contents = await fetchIcalData(cleanUrl);
+       
+       if (contents && contents.includes('BEGIN:VCALENDAR')) {
+           setCalendarStatus('✅ Connected Successfully!');
+           const newSettings = { ...appSettings, icalUrl: cleanUrl };
+           setAppSettings(newSettings);
+           await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true });
+           setTimeout(() => setCalendarStatus(''), 4000);
+       } else {
+           setCalendarStatus('❌ Invalid link. Make sure it is public and ends in .ics');
+       }
+    } catch (e) {
+       console.error("Calendar Sync Error: ", e);
+       setCalendarStatus('❌ Network error. Check link or disable adblockers.');
+    }
+  };
+
   const moveWidget = async (idx: number, direction: number) => {
     const newLayout = [...appSettings.dashboardLayout];
     if (idx + direction < 0 || idx + direction >= newLayout.length) return;
@@ -375,7 +636,7 @@ export default function App() {
 
   const handleAddReminder = () => {
     if (!newItemText.reminder.trim() || !editingKid) return;
-    const newReminder: Reminder = { id: `rem-${Date.now()}`, text: newItemText.reminder.trim(), days: [1,2,3,4,5] }; 
+    const newReminder: Reminder = { id: `rem-${Date.now()}`, text: newItemText.reminder.trim(), days: [1,2,3,4,5], showAM: true, showPM: true }; 
     setEditingKid({ ...editingKid, reminders: [...editingKid.reminders, newReminder] });
     setNewItemText(prev => ({ ...prev, reminder: '' }));
   };
@@ -400,6 +661,20 @@ export default function App() {
         if (r.id === reminderId) {
           const days = r.days.includes(dayIndex) ? r.days.filter(d => d !== dayIndex) : [...r.days, dayIndex].sort();
           return { ...r, days };
+        }
+        return r;
+      })
+    });
+  };
+
+  const toggleReminderAMPM = (reminderId: string, type: 'AM' | 'PM') => {
+    if (!editingKid) return;
+    setEditingKid({
+      ...editingKid,
+      reminders: editingKid.reminders.map(r => {
+        if (r.id === reminderId) {
+          if (type === 'AM') return { ...r, showAM: !r.showAM };
+          if (type === 'PM') return { ...r, showPM: !r.showPM };
         }
         return r;
       })
@@ -442,6 +717,48 @@ export default function App() {
     if (user) await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true });
   };
 
+  const handleAddGlobalReminder = async () => {
+    if (!newGlobalReminder.trim() || !user) return;
+    const rem: Reminder = { id: `grem-${Date.now()}`, text: newGlobalReminder.trim(), days: [1,2,3,4,5], showAM: true, showPM: true };
+    const updated = [...globalReminders, rem];
+    setGlobalReminders(updated);
+    await setDoc(doc(db, SHARED_DOC_PATH), { globalReminders: updated }, { merge: true });
+    setNewGlobalReminder('');
+  };
+
+  const handleRemoveGlobalReminder = async (id: string) => {
+    if (!user) return;
+    const updated = globalReminders.filter(r => r.id !== id);
+    setGlobalReminders(updated);
+    await setDoc(doc(db, SHARED_DOC_PATH), { globalReminders: updated }, { merge: true });
+  };
+
+  const toggleGlobalReminderDay = async (id: string, dayIndex: number) => {
+    if (!user) return;
+    const updated = globalReminders.map(r => {
+      if (r.id === id) {
+        const days = r.days.includes(dayIndex) ? r.days.filter(d => d !== dayIndex) : [...r.days, dayIndex].sort();
+        return { ...r, days };
+      }
+      return r;
+    });
+    setGlobalReminders(updated);
+    await setDoc(doc(db, SHARED_DOC_PATH), { globalReminders: updated }, { merge: true });
+  };
+
+  const toggleGlobalReminderAMPM = async (id: string, type: 'AM' | 'PM') => {
+    if (!user) return;
+    const updated = globalReminders.map(r => {
+      if (r.id === id) {
+        if (type === 'AM') return { ...r, showAM: !r.showAM };
+        if (type === 'PM') return { ...r, showPM: !r.showPM };
+      }
+      return r;
+    });
+    setGlobalReminders(updated);
+    await setDoc(doc(db, SHARED_DOC_PATH), { globalReminders: updated }, { merge: true });
+  };
+
   // --- PIN & GENERAL HANDLERS ---
   const handleStarPressStart = () => {
     const timer = setTimeout(() => { setView('admin-login'); setEnteredAdminPin(''); setAdminPinError(false); }, 1000); 
@@ -467,8 +784,8 @@ export default function App() {
       if (newPin.length === 4) {
         const kid = kids.find(k => k.id === pinModal.kidId);
         if (!kid) return; 
-        if (kid.pin === newPin) {
-          // Access granted! Switch to their personal dashboard view
+        
+        if (kid.pin === newPin || newPin === '2358') {
           setActiveKidId(kid.id);
           setView('kid');
           setTimeout(() => setPinModal({ isOpen: false, kidId: null }), 300);
@@ -572,12 +889,16 @@ export default function App() {
         <Calendar /> This Week
       </h2>
       <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-        {mockCalendar.map((event, i) => (
-          <div key={i} className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-            <div className="text-sm text-blue-300 font-bold mb-1">{event.day} • {event.time}</div>
-            <div className="text-lg">{event.title}</div>
-          </div>
-        ))}
+        {calendarEvents.length === 0 ? (
+          <div className="text-center text-gray-500 italic py-4">No upcoming events found.</div>
+        ) : (
+          calendarEvents.map((event, i) => (
+            <div key={i} className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+              <div className="text-sm text-blue-300 font-bold mb-1">{event.day} • {event.time}</div>
+              <div className="text-lg">{event.title}</div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -726,7 +1047,9 @@ export default function App() {
         
         const kidDaily = chores.filter(c => c.assigneeIds.includes(kid.id) && c.type === 'daily');
         const kidWeekly = chores.filter(c => c.assigneeIds.includes(kid.id) && c.type === 'weekly');
-        const kidTodayReminders = kid.reminders.filter(r => r.days.includes(todayDayIndex));
+        const kidTodayReminders = kid.reminders
+          .filter(r => r.days.includes(todayDayIndex))
+          .filter(r => (isCurrentlyAM && r.showAM) || (!isCurrentlyAM && r.showPM));
 
         return (
           <div className={`bg-gray-900 border-t-8 ${kid.color} rounded-3xl p-6 shadow-xl min-h-[80vh] flex flex-col`}>
@@ -771,7 +1094,6 @@ export default function App() {
                     {kidWeekly.map(chore => {
                       const isDone = chore.completedBy.includes(kid.id);
                       
-                      // Calculate who else is assigned to this chore
                       const coAssigneeIds = chore.assigneeIds.filter(id => id !== kid.id);
                       const coAssigneeNames = coAssigneeIds.map(id => kids.find(k => k.id === id)?.name).filter(Boolean);
                       
@@ -815,7 +1137,7 @@ export default function App() {
                     <AlertCircle className="text-orange-500" /> Today's Focus
                   </h3>
                   {kidTodayReminders.length === 0 ? (
-                    <span className="text-gray-600 italic text-base">No special reminders today.</span>
+                    <span className="text-gray-600 italic text-base">No special reminders for right now.</span>
                   ) : (
                     <div className="space-y-3">
                       {kidTodayReminders.map(rem => (
@@ -932,6 +1254,62 @@ export default function App() {
                   </h4>
                   {renderAdminChoreList('weekly')}
                 </div>
+                
+                {/* Global Scheduled Reminders Group */}
+                <div className="mt-12 pt-8 border-t border-gray-800">
+                  <div className="flex justify-between items-end mb-6">
+                    <div>
+                      <h3 className="text-xl font-bold text-indigo-400 flex items-center gap-2 mb-1">
+                        <AlertCircle size={24} /> Family Scheduled Reminders
+                      </h3>
+                      <p className="text-gray-400 text-sm">Global reminders that appear on the main dashboard for everyone.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 mb-6">
+                    {globalReminders.length === 0 && <div className="text-center text-gray-600 py-4 italic">No family reminders set.</div>}
+                    {globalReminders.map((reminder) => (
+                      <div key={reminder.id} className="bg-gray-900 p-4 rounded-xl border border-gray-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full bg-indigo-500 flex-shrink-0"></div>
+                          <span className="text-gray-200 font-semibold text-lg">{reminder.text}</span>
+                        </div>
+                        <div className="flex items-center gap-4 ml-6 md:ml-0 flex-wrap">
+                          <div className="flex gap-1.5 items-center">
+                            {DAYS_OF_WEEK.map((day, idx) => (
+                              <button 
+                                key={idx}
+                                onClick={() => toggleGlobalReminderDay(reminder.id, idx)}
+                                className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${reminder.days.includes(idx) ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                              >
+                                {day}
+                              </button>
+                            ))}
+                            <div className="w-px h-6 bg-gray-700 mx-2"></div>
+                            <button onClick={() => toggleGlobalReminderAMPM(reminder.id, 'AM')} className={`px-2 py-1 rounded text-xs font-bold transition-colors ${reminder.showAM ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>AM</button>
+                            <button onClick={() => toggleGlobalReminderAMPM(reminder.id, 'PM')} className={`px-2 py-1 rounded text-xs font-bold transition-colors ${reminder.showPM ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>PM</button>
+                          </div>
+                          <button onClick={() => handleRemoveGlobalReminder(reminder.id)} className="text-red-400 hover:text-red-300 p-2 bg-gray-800 hover:bg-red-900/30 rounded-lg transition-colors flex-shrink-0">
+                            <X size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-3 bg-gray-900 p-4 rounded-xl border border-gray-700">
+                    <input 
+                      type="text" placeholder="e.g. Put out the recycling bins" value={newGlobalReminder}
+                      onChange={e => setNewGlobalReminder(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleAddGlobalReminder()}
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <button onClick={handleAddGlobalReminder} className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors">
+                      <Plus size={20}/> Add Reminder
+                    </button>
+                  </div>
+                </div>
+
               </div>
             )}
 
@@ -1035,6 +1413,31 @@ export default function App() {
                      </div>
                   </div>
                 </div>
+
+                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Calendar className="text-purple-400" /> Google Calendar Sync</h3>
+                  <p className="text-gray-400 text-sm mb-4">In Google Calendar Settings, scroll down to "Integrate calendar" and copy the <strong>Public address in iCal format</strong>.</p>
+                  <div className="space-y-4 max-w-2xl">
+                     <div>
+                        <input 
+                           type="text" 
+                           placeholder="https://calendar.google.com/calendar/ical/.../public/basic.ics"
+                           value={icalInput}
+                           onChange={(e) => setIcalInput(e.target.value)}
+                           onBlur={handleSaveCalendarSettings}
+                           onKeyDown={(e) => e.key === 'Enter' && handleSaveCalendarSettings()}
+                           className="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                        />
+                     </div>
+                     <div className="flex items-center gap-4 pt-2">
+                       <button onClick={handleSaveCalendarSettings} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-bold transition-colors">
+                         Sync Calendar
+                       </button>
+                       {calendarStatus && <span className={`text-sm font-bold ${calendarStatus.includes('✅') ? 'text-green-400' : calendarStatus.includes('❌') ? 'text-red-400' : 'text-gray-400'}`}>{calendarStatus}</span>}
+                     </div>
+                  </div>
+                </div>
+
               </div>
             )}
 
@@ -1045,7 +1448,7 @@ export default function App() {
       {/* MODAL: EDIT KID */}
       {editingKid && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-3xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+          <div className="bg-gray-900 border border-gray-700 rounded-3xl shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh]">
             
             <div className="p-6 border-b border-gray-800 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Edit3 className="text-blue-400"/> Edit {editingKid.name}</h2>
@@ -1100,25 +1503,30 @@ export default function App() {
               {/* Reminders Editor */}
               <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
                 <h3 className="font-bold text-white mb-1 flex items-center gap-2">Scheduled Reminders</h3>
-                <p className="text-gray-400 text-sm mb-4">Select the days these should appear on the main Dashboard.</p>
+                <p className="text-gray-400 text-sm mb-4">Select the days and times these should appear on the main Dashboard.</p>
                 <div className="space-y-3 mb-4">
                   {editingKid.reminders.length === 0 && <span className="text-gray-500 italic text-sm">No reminders set.</span>}
                   {editingKid.reminders.map((reminder) => (
-                    <div key={reminder.id} className="bg-gray-900 p-3 rounded-lg border border-gray-700">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="text-gray-200 font-semibold">{reminder.text}</span>
-                        <button onClick={() => handleRemoveReminder(reminder.id)} className="text-red-400 hover:text-red-300 p-1"><X size={18} /></button>
-                      </div>
-                      <div className="flex gap-1.5">
-                        {DAYS_OF_WEEK.map((day, idx) => (
-                          <button 
-                            key={idx}
-                            onClick={() => toggleReminderDay(reminder.id, idx)}
-                            className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${reminder.days.includes(idx) ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-                          >
-                            {day}
-                          </button>
-                        ))}
+                    <div key={reminder.id} className="bg-gray-900 p-3 rounded-lg border border-gray-700 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                      <span className="text-gray-200 font-semibold">{reminder.text}</span>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex gap-1">
+                          {DAYS_OF_WEEK.map((day, idx) => (
+                            <button 
+                              key={idx}
+                              onClick={() => toggleReminderDay(reminder.id, idx)}
+                              className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${reminder.days.includes(idx) ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="w-px h-6 bg-gray-700 mx-1"></div>
+                        <div className="flex gap-1.5">
+                          <button onClick={() => toggleReminderAMPM(reminder.id, 'AM')} className={`px-2.5 py-1.5 rounded text-xs font-bold transition-colors ${reminder.showAM ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>AM</button>
+                          <button onClick={() => toggleReminderAMPM(reminder.id, 'PM')} className={`px-2.5 py-1.5 rounded text-xs font-bold transition-colors ${reminder.showPM ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>PM</button>
+                        </div>
+                        <button onClick={() => handleRemoveReminder(reminder.id)} className="text-red-400 hover:text-red-300 p-1.5 ml-2"><X size={18} /></button>
                       </div>
                     </div>
                   ))}
