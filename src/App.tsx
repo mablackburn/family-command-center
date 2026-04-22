@@ -77,6 +77,12 @@ type AppSettings = {
   icalUrl?: string;
 };
 
+type CalendarEvent = {
+  day: string;
+  time: string;
+  title: string;
+};
+
 // --- DEFAULT DATA ---
 const initialKids: Kid[] = [
   { id: 1, name: 'Alex', color: 'border-blue-500', headerColor: 'text-blue-400', pin: '1234', routines: ['Brush Teeth', 'Pack Backpack'], reminders: [{ id: 'r1', text: 'Library Books', days: [2], showAM: true, showPM: true }] },
