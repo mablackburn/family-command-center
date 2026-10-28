@@ -29,8 +29,94 @@ const SHARED_DOC_PATH = 'commandCenter/familyData';
 // --- HELPER ---
 const getTodayStr = () => {
   const d = new Date();
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };  const DAYS_OF_WEEK = ['Su', 'M', 'T', 'W', 'Th', 'F', 'Sa'];  const WIDGET_TITLES: Record<string, string> = { 'calendar': 'Weekly Calendar', 'reminders': 'Today (Weather & Reminders)', 'chores': 'Individual Chore Progress' };  // --- TYPES --- type ChoreType = 'daily' \vert{} 'weekly';  type Chore = { id: string; text: string; type: ChoreType; assigneeIds: number[]; completedBy: number[]; };  type Reminder = { id: string; text: string; days: number[]; showAM: boolean; showPM: boolean; };  type Kid = { id: number; name: string; color: string; headerColor: string; pin: string; routines: string[]; reminders: Reminder[]; };  type AppSettings = { autoResetDailies: boolean; lastResetDate: string; zipCode: string; dashboardLayout: string[]; icalUrl?: string; };  type CalendarEvent = { day: string; time: string; title: string; };  // --- DEFAULT DATA --- const initialKids: Kid[] = [ { id: 1, name: 'Alex', color: 'border-blue-500', headerColor: 'text-blue-400', pin: '1234', routines: ['Brush Teeth', 'Pack Backpack'], reminders: [{ id: 'r1', text: 'Library Books', days: [2], showAM: true, showPM: true }] }, { id: 2, name: 'Jordan', color: 'border-green-500', headerColor: 'text-green-400', pin: '1234', routines: ['Brush Teeth', 'Practice Piano'], reminders: [{ id: 'r2', text: 'Soccer Cleats for Practice', days: [2, 4], showAM: false, showPM: true }] }, { id: 3, name: 'Taylor', color: 'border-purple-500', headerColor: 'text-purple-400', pin: '1234', routines: ['Brush Teeth', 'Lay out clothes'], reminders: [] }, { id: 4, name: 'Casey', color: 'border-orange-500', headerColor: 'text-orange-400', pin: '1234', routines: ['Brush Teeth', 'Put shoes away'], reminders: [] } ];  const initialChores: Chore[] = [ { id: 'c1', text: 'Load Dishwasher', type: 'daily', assigneeIds: [1], completedBy: [] }, { id: 'c2', text: 'Wipe Counters', type: 'daily', assigneeIds: [1], completedBy: [] }, { id: 'c3', text: 'Feed the Dog', type: 'daily', assigneeIds: [2, 3], completedBy: [] }, { id: 'c4', text: 'Clear Dinner Table', type: 'daily', assigneeIds: [2], completedBy: [] }, { id: 'c5', text: 'Take out Trash', type: 'weekly', assigneeIds: [1], completedBy: [] }, { id: 'c6', text: 'Clean Downstairs Bath', type: 'weekly', assigneeIds: [2], completedBy: [] } ];  const mockCalendar = [ { day: 'Mon', time: '3:30 PM', title: 'Dentist - Alex' }, { day: 'Tue', time: '4:00 PM', title: 'Soccer Practice' }, { day: 'Wed', time: '5:00 PM', title: 'Piano Lessons' }, { day: 'Fri', time: '6:30 PM', title: 'Family Movie Night' }, ];  const initialGlobalReminders: Reminder[] = [ { id: 'gr1', text: 'Take out Trash Bins', days: [3], showAM: true, showPM: true } ];  // --- ICAL PARSER HELPER --- const fetchIcalData = async (url: string) => { const proxies = [ `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+};
+
+const DAYS_OF_WEEK = ['Su', 'M', 'T', 'W', 'Th', 'F', 'Sa'];
+
+const WIDGET_TITLES: Record<string, string> = {
+  'calendar': 'Weekly Calendar',
+  'reminders': 'Today (Weather & Reminders)',
+  'chores': 'Individual Chore Progress'
+};
+
+// --- TYPES ---
+type ChoreType = 'daily' | 'weekly';
+
+type Chore = {
+  id: string;
+  text: string;
+  type: ChoreType;
+  assigneeIds: number[]; 
+  completedBy: number[]; 
+};
+
+type Reminder = {
+  id: string;
+  text: string;
+  days: number[]; 
+  showAM: boolean;
+  showPM: boolean;
+};
+
+type Kid = {
+  id: number;
+  name: string;
+  color: string;
+  headerColor: string;
+  pin: string;
+  routines: string[];
+  reminders: Reminder[]; 
+};
+
+type AppSettings = {
+  autoResetDailies: boolean;
+  lastResetDate: string;
+  zipCode: string; 
+  dashboardLayout: string[];
+  icalUrl?: string;
+};
+
+type CalendarEvent = {
+  day: string;
+  time: string;
+  title: string;
+};
+
+// --- DEFAULT DATA ---
+const initialKids: Kid[] = [
+  { id: 1, name: 'Alex', color: 'border-blue-500', headerColor: 'text-blue-400', pin: '1234', routines: ['Brush Teeth', 'Pack Backpack'], reminders: [{ id: 'r1', text: 'Library Books', days: [2], showAM: true, showPM: true }] },
+  { id: 2, name: 'Jordan', color: 'border-green-500', headerColor: 'text-green-400', pin: '1234', routines: ['Brush Teeth', 'Practice Piano'], reminders: [{ id: 'r2', text: 'Soccer Cleats for Practice', days: [2, 4], showAM: false, showPM: true }] },
+  { id: 3, name: 'Taylor', color: 'border-purple-500', headerColor: 'text-purple-400', pin: '1234', routines: ['Brush Teeth', 'Lay out clothes'], reminders: [] },
+  { id: 4, name: 'Casey', color: 'border-orange-500', headerColor: 'text-orange-400', pin: '1234', routines: ['Brush Teeth', 'Put shoes away'], reminders: [] }
+];
+
+const initialChores: Chore[] = [
+  { id: 'c1', text: 'Load Dishwasher', type: 'daily', assigneeIds: [1], completedBy: [] },
+  { id: 'c2', text: 'Wipe Counters', type: 'daily', assigneeIds: [1], completedBy: [] },
+  { id: 'c3', text: 'Feed the Dog', type: 'daily', assigneeIds: [2, 3], completedBy: [] }, 
+  { id: 'c4', text: 'Clear Dinner Table', type: 'daily', assigneeIds: [2], completedBy: [] },
+  { id: 'c5', text: 'Take out Trash', type: 'weekly', assigneeIds: [1], completedBy: [] },
+  { id: 'c6', text: 'Clean Downstairs Bath', type: 'weekly', assigneeIds: [2], completedBy: [] }
+];
+
+const mockCalendar = [
+  { day: 'Mon', time: '3:30 PM', title: 'Dentist - Alex' },
+  { day: 'Tue', time: '4:00 PM', title: 'Soccer Practice' },
+  { day: 'Wed', time: '5:00 PM', title: 'Piano Lessons' },
+  { day: 'Fri', time: '6:30 PM', title: 'Family Movie Night' },
+];
+
+const initialGlobalReminders: Reminder[] = [
+  { id: 'gr1', text: 'Take out Trash Bins', days: [3], showAM: true, showPM: true } 
+];
+
+// --- ICAL PARSER HELPER ---
+const fetchIcalData = async (url: string) => {
+  const proxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
   ];
 
   for (const proxy of proxies) {
@@ -353,12 +439,219 @@ export default function App() {
     }
     const fetchWeather = async () => {
        try {
-          const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(appSettings.zipCode)}&count=1`); const geoData = await geoRes.json(); if(geoData.results && geoData.results.length > 0) { const { latitude, longitude } = geoData.results[0]; const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min&current_weather=true&temperature_unit=fahrenheit&timezone=auto`); const wData = await wRes.json(); setWeather({ current: Math.round(wData.current_weather.temperature), high: Math.round(wData.daily.temperature_2m_max[0]), low: Math.round(wData.daily.temperature_2m_min[0]) }); } } catch(e) { console.error("Weather fetch failed:", e); } }; fetchWeather(); const interval = setInterval(fetchWeather, 30 * 60 * 1000); return () => clearInterval(interval); }, [appSettings.zipCode]);  // --- CALENDAR FETCH --- useEffect(() => { if (!appSettings.icalUrl) { setCalendarEvents(mockCalendar); return; } const fetchCal = async () => { try { let safeUrl = appSettings.icalUrl!; if (safeUrl.startsWith('webcal://')) safeUrl = safeUrl.replace('webcal://', 'https://');  const contents = await fetchIcalData(safeUrl); const events = parseICS(contents); setCalendarEvents(events); } catch (e) { console.error("Calendar fetch error:", e); } }; fetchCal(); const interval = setInterval(fetchCal, 15 * 60 * 1000); return () => clearInterval(interval); }, [appSettings.icalUrl]);  // --- CALCULATIONS --- const calculateKidProgress = (kidId: number, type: ChoreType) => { const assigned = chores.filter(c => c.assigneeIds.includes(kidId) && c.type === type); if (assigned.length === 0) return 0; const done = assigned.filter(c => c.completedBy.includes(kidId)).length; return Math.round((done / assigned.length) * 100); };  const calculateOverallProgress = (type: ChoreType) => { let totalAssignments = 0; let totalDone = 0; chores.filter(c => c.type === type).forEach(c => { totalAssignments += c.assigneeIds.length; totalDone += c.completedBy.length; }); return totalAssignments === 0 ? 0 : Math.round((totalDone / totalAssignments) * 100); };  const todayDayIndex = new Date().getDay(); const isCurrentlyAM = new Date().getHours() < 12;  const activeKidReminders = kids.flatMap(kid => kid.reminders .filter(rem => rem.days.includes(todayDayIndex)) .filter(rem => (isCurrentlyAM && rem.showAM) \vert{}\vert{} (!isCurrentlyAM && rem.showPM)) .map(rem => ({ kidName: kid.name, color: kid.color.replace('border-', 'bg-').replace('-500', '-500'), text: rem.text })) );  const activeGlobalReminders = globalReminders .filter(rem => rem.days.includes(todayDayIndex)) .filter(rem => (isCurrentlyAM && rem.showAM) \vert{}\vert{} (!isCurrentlyAM && rem.showPM)) .map(rem => ({ kidName: 'Family', color: 'bg-indigo-500', text: rem.text }));  const activeReminders = [...activeGlobalReminders, ...activeKidReminders];  // --- KID DASHBOARD HANDLERS --- const toggleKidChore = async (choreId: string, kidId: number) => { const updatedChores = chores.map(c => { if (c.id === choreId) { const isDone = c.completedBy.includes(kidId); const newCompleted = isDone ? c.completedBy.filter(id => id !== kidId) : [...c.completedBy, kidId]; return { ...c, completedBy: newCompleted }; } return c; }); setChores(updatedChores); if (user) await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true }); };  // --- ADMIN SETTINGS HANDLERS --- const handleResetDailies = async () => { if (!user) return; const resetChores = chores.map(c => c.type === 'daily' ? { ...c, completedBy: [] } : c); setChores(resetChores); await setDoc(doc(db, SHARED_DOC_PATH), { chores: resetChores, settings: { ...appSettings, lastResetDate: getTodayStr() } }, { merge: true }); };  const handleResetWeeklies = async () => { if (!user) return; const resetChores = chores.map(c => c.type === 'weekly' ? { ...c, completedBy: [] } : c); setChores(resetChores); await setDoc(doc(db, SHARED_DOC_PATH), { chores: resetChores }, { merge: true }); };  const toggleAutoReset = async () => { const newSettings = { ...appSettings, autoResetDailies: !appSettings.autoResetDailies }; setAppSettings(newSettings); await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true }); };  const handleSaveWeatherSetting = async () => { if (!user) return; setWeatherStatus('Checking city...'); try { if (!weatherInput.trim()) { const newSettings = { ...appSettings, zipCode: '' }; setAppSettings(newSettings); await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true }); setWeatherStatus('Weather disabled.'); setTimeout(() => setWeatherStatus(''), 3000); return; }  const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(weatherInput)}&count=1`);
+          const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(appSettings.zipCode)}&count=1`);
+          const geoData = await geoRes.json();
+          if(geoData.results && geoData.results.length > 0) {
+             const { latitude, longitude } = geoData.results[0];
+             const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min&current_weather=true&temperature_unit=fahrenheit&timezone=auto`);
+             const wData = await wRes.json();
+             setWeather({
+                current: Math.round(wData.current_weather.temperature),
+                high: Math.round(wData.daily.temperature_2m_max[0]),
+                low: Math.round(wData.daily.temperature_2m_min[0])
+             });
+          }
+       } catch(e) { console.error("Weather fetch failed:", e); }
+    };
+    fetchWeather();
+    const interval = setInterval(fetchWeather, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [appSettings.zipCode]);
+
+  // --- CALENDAR FETCH ---
+  useEffect(() => {
+    if (!appSettings.icalUrl) {
+      setCalendarEvents(mockCalendar);
+      return;
+    }
+    const fetchCal = async () => {
+      try {
+        let safeUrl = appSettings.icalUrl!;
+        if (safeUrl.startsWith('webcal://')) safeUrl = safeUrl.replace('webcal://', 'https://');
+        
+        const contents = await fetchIcalData(safeUrl);
+        const events = parseICS(contents);
+        setCalendarEvents(events);
+      } catch (e) {
+        console.error("Calendar fetch error:", e);
+      }
+    };
+    fetchCal();
+    const interval = setInterval(fetchCal, 15 * 60 * 1000); 
+    return () => clearInterval(interval);
+  }, [appSettings.icalUrl]);
+
+  // --- CALCULATIONS ---
+  const calculateKidProgress = (kidId: number, type: ChoreType) => {
+    const assigned = chores.filter(c => c.assigneeIds.includes(kidId) && c.type === type);
+    if (assigned.length === 0) return 0;
+    const done = assigned.filter(c => c.completedBy.includes(kidId)).length;
+    return Math.round((done / assigned.length) * 100);
+  };
+
+  const calculateOverallProgress = (type: ChoreType) => {
+    let totalAssignments = 0;
+    let totalDone = 0;
+    chores.filter(c => c.type === type).forEach(c => {
+      totalAssignments += c.assigneeIds.length;
+      totalDone += c.completedBy.length;
+    });
+    return totalAssignments === 0 ? 0 : Math.round((totalDone / totalAssignments) * 100);
+  };
+
+  const todayDayIndex = new Date().getDay(); 
+  const isCurrentlyAM = new Date().getHours() < 12;
+  
+  const activeKidReminders = kids.flatMap(kid => 
+    kid.reminders
+      .filter(rem => rem.days.includes(todayDayIndex))
+      .filter(rem => (isCurrentlyAM && rem.showAM) || (!isCurrentlyAM && rem.showPM))
+      .map(rem => ({ 
+        kidName: kid.name, color: kid.color.replace('border-', 'bg-').replace('-500', '-500'), text: rem.text 
+      }))
+  );
+  
+  const activeGlobalReminders = globalReminders
+    .filter(rem => rem.days.includes(todayDayIndex))
+    .filter(rem => (isCurrentlyAM && rem.showAM) || (!isCurrentlyAM && rem.showPM))
+    .map(rem => ({
+      kidName: 'Family', color: 'bg-indigo-500', text: rem.text
+    }));
+    
+  const activeReminders = [...activeGlobalReminders, ...activeKidReminders];
+
+  // --- KID DASHBOARD HANDLERS ---
+  const toggleKidChore = async (choreId: string, kidId: number) => {
+    const updatedChores = chores.map(c => {
+      if (c.id === choreId) {
+        const isDone = c.completedBy.includes(kidId);
+        const newCompleted = isDone ? c.completedBy.filter(id => id !== kidId) : [...c.completedBy, kidId];
+        return { ...c, completedBy: newCompleted };
+      }
+      return c;
+    });
+    setChores(updatedChores);
+    if (user) await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true });
+  };
+
+  // --- ADMIN SETTINGS HANDLERS ---
+  const handleResetDailies = async () => {
+    if (!user) return;
+    const resetChores = chores.map(c => c.type === 'daily' ? { ...c, completedBy: [] } : c);
+    setChores(resetChores);
+    await setDoc(doc(db, SHARED_DOC_PATH), { chores: resetChores, settings: { ...appSettings, lastResetDate: getTodayStr() } }, { merge: true });
+  };
+
+  const handleResetWeeklies = async () => {
+    if (!user) return;
+    const resetChores = chores.map(c => c.type === 'weekly' ? { ...c, completedBy: [] } : c);
+    setChores(resetChores);
+    await setDoc(doc(db, SHARED_DOC_PATH), { chores: resetChores }, { merge: true });
+  };
+
+  const toggleAutoReset = async () => {
+    const newSettings = { ...appSettings, autoResetDailies: !appSettings.autoResetDailies };
+    setAppSettings(newSettings);
+    await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true });
+  };
+
+  const handleSaveWeatherSetting = async () => {
+    if (!user) return;
+    setWeatherStatus('Checking city...');
+    try {
+       if (!weatherInput.trim()) {
+         const newSettings = { ...appSettings, zipCode: '' };
+         setAppSettings(newSettings);
+         await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true });
+         setWeatherStatus('Weather disabled.');
+         setTimeout(() => setWeatherStatus(''), 3000);
+         return;
+       }
+
+       const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(weatherInput)}&count=1`);
        const geoData = await geoRes.json();
        
        if(geoData.results && geoData.results.length > 0) {
-         const foundCity = `${geoData.results[0].name},${geoData.results[0].admin1 || geoData.results[0].country}`;
-         setWeatherStatus(`✅ Found: ${foundCity}`); const newSettings = { ...appSettings, zipCode: weatherInput.trim() }; setAppSettings(newSettings); await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true }); setTimeout(() => setWeatherStatus(''), 4000); } else { setWeatherStatus('❌ City not found. Please try again.'); } } catch(e) { setWeatherStatus('❌ Error reaching weather service.'); } };  const handleSaveCalendarSettings = async () => { if (!user) return; setCalendarStatus('Syncing...');  let cleanUrl = icalInput.trim();  if (!cleanUrl) { const newSettings = { ...appSettings, icalUrl: '' }; setAppSettings(newSettings); await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true }); setCalendarStatus('Calendar disconnected. Showing sample data.'); setTimeout(() => setCalendarStatus(''), 3000); return; }  if (cleanUrl.startsWith('webcal://')) { cleanUrl = cleanUrl.replace('webcal://', 'https://'); setIcalInput(cleanUrl); }  try { const contents = await fetchIcalData(cleanUrl);  if (contents && contents.includes('BEGIN:VCALENDAR')) { setCalendarStatus('✅ Connected Successfully!'); const newSettings = { ...appSettings, icalUrl: cleanUrl }; setAppSettings(newSettings); await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true }); setTimeout(() => setCalendarStatus(''), 4000); } else { setCalendarStatus('❌ Invalid link. Make sure it is public and ends in .ics'); } } catch (e) { console.error("Calendar Sync Error: ", e); setCalendarStatus('❌ Network error. Check link or disable adblockers.'); } };  const moveWidget = async (idx: number, direction: number) => { const newLayout = [...appSettings.dashboardLayout]; if (idx + direction < 0 \vert{}\vert{} idx + direction >= newLayout.length) return; const temp = newLayout[idx]; newLayout[idx] = newLayout[idx + direction]; newLayout[idx + direction] = temp; setAppSettings({ ...appSettings, dashboardLayout: newLayout }); await setDoc(doc(db, SHARED_DOC_PATH), { settings: { ...appSettings, dashboardLayout: newLayout } }, { merge: true }); };  // --- KID EDITOR HANDLERS --- const handleSaveKid = async () => { if (!editingKid \vert{}\vert{} !user) return; const updatedKids = kids.map(k => k.id === editingKid.id ? editingKid : k); setKids(updatedKids); setEditingKid(null); await setDoc(doc(db, SHARED_DOC_PATH), { kids: updatedKids }, { merge: true }); };  const handleAddRoutine = () => { if (!newItemText.routine.trim() \vert{}\vert{} !editingKid) return; setEditingKid({ ...editingKid, routines: [...editingKid.routines, newItemText.routine.trim()] }); setNewItemText(prev => ({ ...prev, routine: '' })); };  const handleAddReminder = () => { if (!newItemText.reminder.trim() \vert{}\vert{} !editingKid) return; const newReminder: Reminder = { id: `rem-${Date.now()}`, text: newItemText.reminder.trim(), days: [1,2,3,4,5], showAM: true, showPM: true }; 
+         const foundCity = `${geoData.results[0].name}, ${geoData.results[0].admin1 || geoData.results[0].country}`;
+         setWeatherStatus(`✅ Found: ${foundCity}`);
+         const newSettings = { ...appSettings, zipCode: weatherInput.trim() };
+         setAppSettings(newSettings);
+         await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true });
+         setTimeout(() => setWeatherStatus(''), 4000);
+       } else {
+         setWeatherStatus('❌ City not found. Please try again.');
+       }
+    } catch(e) {
+       setWeatherStatus('❌ Error reaching weather service.');
+    }
+  };
+
+  const handleSaveCalendarSettings = async () => {
+    if (!user) return;
+    setCalendarStatus('Syncing...');
+    
+    let cleanUrl = icalInput.trim();
+    
+    if (!cleanUrl) {
+       const newSettings = { ...appSettings, icalUrl: '' };
+       setAppSettings(newSettings);
+       await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true });
+       setCalendarStatus('Calendar disconnected. Showing sample data.');
+       setTimeout(() => setCalendarStatus(''), 3000);
+       return;
+    }
+    
+    if (cleanUrl.startsWith('webcal://')) {
+       cleanUrl = cleanUrl.replace('webcal://', 'https://');
+       setIcalInput(cleanUrl); 
+    }
+
+    try {
+       const contents = await fetchIcalData(cleanUrl);
+       
+       if (contents && contents.includes('BEGIN:VCALENDAR')) {
+           setCalendarStatus('✅ Connected Successfully!');
+           const newSettings = { ...appSettings, icalUrl: cleanUrl };
+           setAppSettings(newSettings);
+           await setDoc(doc(db, SHARED_DOC_PATH), { settings: newSettings }, { merge: true });
+           setTimeout(() => setCalendarStatus(''), 4000);
+       } else {
+           setCalendarStatus('❌ Invalid link. Make sure it is public and ends in .ics');
+       }
+    } catch (e) {
+       console.error("Calendar Sync Error: ", e);
+       setCalendarStatus('❌ Network error. Check link or disable adblockers.');
+    }
+  };
+
+  const moveWidget = async (idx: number, direction: number) => {
+    const newLayout = [...appSettings.dashboardLayout];
+    if (idx + direction < 0 || idx + direction >= newLayout.length) return;
+    const temp = newLayout[idx];
+    newLayout[idx] = newLayout[idx + direction];
+    newLayout[idx + direction] = temp;
+    setAppSettings({ ...appSettings, dashboardLayout: newLayout });
+    await setDoc(doc(db, SHARED_DOC_PATH), { settings: { ...appSettings, dashboardLayout: newLayout } }, { merge: true });
+  };
+
+  // --- KID EDITOR HANDLERS ---
+  const handleSaveKid = async () => {
+    if (!editingKid || !user) return;
+    const updatedKids = kids.map(k => k.id === editingKid.id ? editingKid : k);
+    setKids(updatedKids); 
+    setEditingKid(null);
+    await setDoc(doc(db, SHARED_DOC_PATH), { kids: updatedKids }, { merge: true });
+  };
+
+  const handleAddRoutine = () => {
+    if (!newItemText.routine.trim() || !editingKid) return;
+    setEditingKid({ ...editingKid, routines: [...editingKid.routines, newItemText.routine.trim()] });
+    setNewItemText(prev => ({ ...prev, routine: '' }));
+  };
+
+  const handleAddReminder = () => {
+    if (!newItemText.reminder.trim() || !editingKid) return;
+    const newReminder: Reminder = { id: `rem-${Date.now()}`, text: newItemText.reminder.trim(), days: [1,2,3,4,5], showAM: true, showPM: true }; 
     setEditingKid({ ...editingKid, reminders: [...editingKid.reminders, newReminder] });
     setNewItemText(prev => ({ ...prev, reminder: '' }));
   };
@@ -406,7 +699,42 @@ export default function App() {
   // --- MASTER CHORE HANDLERS ---
   const handleAdminAddChore = async () => {
     if (!newAdminChore.text.trim() || !user) return;
-    const chore: Chore = { id: `c-${Date.now()}`, text: newAdminChore.text.trim(), type: newAdminChore.type, assigneeIds: [], completedBy: [] }; const updatedChores = [...chores, chore]; setChores(updatedChores); await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true }); setNewAdminChore(prev => ({ ...prev, text: '' })); };  const handleAdminDeleteChore = async (id: string) => { if (!user) return; const updatedChores = chores.filter(c => c.id !== id); setChores(updatedChores); await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true }); };  const handleChoreTextChange = (id: string, newText: string) => { setChores(chores.map(c => c.id === id ? { ...c, text: newText } : c)); };  const handleChoreTextBlur = async () => { if (user) await setDoc(doc(db, SHARED_DOC_PATH), { chores }, { merge: true }); };  const toggleChoreAssignee = async (choreId: string, kidId: number) => { const updatedChores = chores.map(c => { if (c.id === choreId) { const newAssignees = c.assigneeIds.includes(kidId) ? c.assigneeIds.filter(id => id !== kidId) : [...c.assigneeIds, kidId]; const newCompleted = c.completedBy.filter(id => newAssignees.includes(id)); return { ...c, assigneeIds: newAssignees, completedBy: newCompleted }; } return c; }); setChores(updatedChores); if (user) await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true }); };  const handleAddGlobalReminder = async () => { if (!newGlobalReminder.trim() \vert{}\vert{} !user) return; const rem: Reminder = { id: `grem-${Date.now()}`, text: newGlobalReminder.trim(), days: [1,2,3,4,5], showAM: true, showPM: true };
+    const chore: Chore = { id: `c-${Date.now()}`, text: newAdminChore.text.trim(), type: newAdminChore.type, assigneeIds: [], completedBy: [] };
+    const updatedChores = [...chores, chore];
+    setChores(updatedChores);
+    await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true });
+    setNewAdminChore(prev => ({ ...prev, text: '' }));
+  };
+
+  const handleAdminDeleteChore = async (id: string) => {
+    if (!user) return;
+    const updatedChores = chores.filter(c => c.id !== id);
+    setChores(updatedChores);
+    await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true });
+  };
+
+  const handleChoreTextChange = (id: string, newText: string) => {
+    setChores(chores.map(c => c.id === id ? { ...c, text: newText } : c));
+  };
+
+  const handleChoreTextBlur = async () => { if (user) await setDoc(doc(db, SHARED_DOC_PATH), { chores }, { merge: true }); };
+
+  const toggleChoreAssignee = async (choreId: string, kidId: number) => {
+    const updatedChores = chores.map(c => {
+      if (c.id === choreId) {
+        const newAssignees = c.assigneeIds.includes(kidId) ? c.assigneeIds.filter(id => id !== kidId) : [...c.assigneeIds, kidId];
+        const newCompleted = c.completedBy.filter(id => newAssignees.includes(id));
+        return { ...c, assigneeIds: newAssignees, completedBy: newCompleted };
+      }
+      return c;
+    });
+    setChores(updatedChores);
+    if (user) await setDoc(doc(db, SHARED_DOC_PATH), { chores: updatedChores }, { merge: true });
+  };
+
+  const handleAddGlobalReminder = async () => {
+    if (!newGlobalReminder.trim() || !user) return;
+    const rem: Reminder = { id: `grem-${Date.now()}`, text: newGlobalReminder.trim(), days: [1,2,3,4,5], showAM: true, showPM: true };
     const updated = [...globalReminders, rem];
     setGlobalReminders(updated);
     await setDoc(doc(db, SHARED_DOC_PATH), { globalReminders: updated }, { merge: true });
@@ -550,7 +878,91 @@ export default function App() {
           const isUnassigned = chore.assigneeIds.length === 0;
           return (
             <div key={chore.id} className={`flex items-center gap-4 p-3 rounded-xl border transition-colors ${isUnassigned ? 'bg-red-900/20 border-red-500/50 hover:bg-red-900/30' : 'bg-gray-900 border-gray-700 hover:bg-gray-800'}`}>
-              <div className={`w-2 h-2 rounded-full ${chore.type === 'daily' ? 'bg-green-500' : 'bg-purple-500'} flex-shrink-0`} title={chore.type}></div>  {editingChoreId === chore.id ? ( <input autoFocus value={chore.text} onChange={e => handleChoreTextChange(chore.id, e.target.value)} onBlur={() => { handleChoreTextBlur(); setEditingChoreId(null); }} onKeyDown={e => e.key === 'Enter' && setEditingChoreId(null)} className="flex-1 bg-gray-800 text-white font-semibold focus:outline-none border border-blue-500 rounded px-2 py-1 min-w-[100px]" /> ) : ( <span className="flex-1 text-white font-semibold px-1 py-1 truncate">{chore.text}</span> )}  <div className="flex gap-4"> {kids.map(kid => ( <div key={kid.id} className="flex flex-col items-center justify-center w-16 sm:w-24"> <input type="checkbox" checked={chore.assigneeIds.includes(kid.id)} onChange={() => toggleChoreAssignee(chore.id, kid.id)} className="w-5 h-5 rounded border-gray-600 cursor-pointer accent-blue-500" /> </div> ))} </div>  <div className="flex gap-1 flex-shrink-0"> {editingChoreId === chore.id ? ( <button onMouseDown={(e) => e.preventDefault()} onClick={() => setEditingChoreId(null)} className="text-green-400 hover:text-green-300 p-2 hover:bg-green-900/30 rounded-lg transition-colors"> <Save size={18} /> </button> ) : ( <button onClick={() => setEditingChoreId(chore.id)} className="text-blue-400 hover:text-blue-300 p-2 hover:bg-blue-900/30 rounded-lg transition-colors"> <Edit3 size={18} /> </button> )} <button onClick={() => handleAdminDeleteChore(chore.id)} className="text-red-400 hover:text-red-300 p-2 hover:bg-red-900/30 rounded-lg transition-colors"> <X size={18} /> </button> </div> </div> ); })} </div> ); };  const renderCalendarWidget = () => ( <div key="calendar" className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col h-full"> <h2 className="text-xl font-semibold text-blue-400 flex items-center gap-2 mb-6"> <Calendar /> This Week </h2> <div className="flex-1 overflow-y-auto space-y-4 pr-2"> {calendarEvents.length === 0 ? ( <div className="text-center text-gray-500 italic py-4">No upcoming events found.</div> ) : ( calendarEvents.map((event, i) => ( <div key={i} className="bg-gray-800 p-4 rounded-xl border border-gray-700"> <div className="text-sm text-blue-300 font-bold mb-1">{event.day} • {event.time}</div> <div className="text-lg">{event.title}</div> </div> )) )} </div> </div> );  const renderRemindersWidget = () => ( <div key="reminders" className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col h-full"> <div className="flex justify-between items-center mb-6"> <h2 className="text-xl font-semibold text-orange-400 flex items-center gap-2"> <AlertCircle /> Today </h2> <span className="text-sm font-bold text-gray-500 uppercase tracking-widest">{DAYS_OF_WEEK[todayDayIndex]}</span> </div>  {appSettings.zipCode && <div className="mb-6"><WeatherRing weather={weather} /></div>}  <div className="flex-1 overflow-y-auto space-y-3 pr-2"> {activeReminders.length === 0 ? ( <div className="text-gray-500 italic p-4 text-center">No reminders scheduled for today.</div> ) : ( activeReminders.map((reminder, i) => ( <div key={i} className="flex items-start gap-3 bg-gray-800 p-4 rounded-xl"> <div className={`w-3 h-3 rounded-full ${reminder.color} mt-1.5 flex-shrink-0`}></div>
+              <div className={`w-2 h-2 rounded-full ${chore.type === 'daily' ? 'bg-green-500' : 'bg-purple-500'} flex-shrink-0`} title={chore.type}></div>
+              
+              {editingChoreId === chore.id ? (
+                <input 
+                  autoFocus
+                  value={chore.text}
+                  onChange={e => handleChoreTextChange(chore.id, e.target.value)}
+                  onBlur={() => { handleChoreTextBlur(); setEditingChoreId(null); }}
+                  onKeyDown={e => e.key === 'Enter' && setEditingChoreId(null)}
+                  className="flex-1 bg-gray-800 text-white font-semibold focus:outline-none border border-blue-500 rounded px-2 py-1 min-w-[100px]"
+                />
+              ) : (
+                <span className="flex-1 text-white font-semibold px-1 py-1 truncate">{chore.text}</span>
+              )}
+              
+              <div className="flex gap-4">
+                {kids.map(kid => (
+                  <div key={kid.id} className="flex flex-col items-center justify-center w-16 sm:w-24">
+                    <input 
+                      type="checkbox" checked={chore.assigneeIds.includes(kid.id)} onChange={() => toggleChoreAssignee(chore.id, kid.id)}
+                      className="w-5 h-5 rounded border-gray-600 cursor-pointer accent-blue-500"
+                    />
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex gap-1 flex-shrink-0">
+                {editingChoreId === chore.id ? (
+                  <button onMouseDown={(e) => e.preventDefault()} onClick={() => setEditingChoreId(null)} className="text-green-400 hover:text-green-300 p-2 hover:bg-green-900/30 rounded-lg transition-colors">
+                    <Save size={18} />
+                  </button>
+                ) : (
+                  <button onClick={() => setEditingChoreId(chore.id)} className="text-blue-400 hover:text-blue-300 p-2 hover:bg-blue-900/30 rounded-lg transition-colors">
+                    <Edit3 size={18} />
+                  </button>
+                )}
+                <button onClick={() => handleAdminDeleteChore(chore.id)} className="text-red-400 hover:text-red-300 p-2 hover:bg-red-900/30 rounded-lg transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderCalendarWidget = () => (
+    <div key="calendar" className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col h-full">
+      <h2 className="text-xl font-semibold text-blue-400 flex items-center gap-2 mb-6">
+        <Calendar /> This Week
+      </h2>
+      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        {calendarEvents.length === 0 ? (
+          <div className="text-center text-gray-500 italic py-4">No upcoming events found.</div>
+        ) : (
+          calendarEvents.map((event, i) => (
+            <div key={i} className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+              <div className="text-sm text-blue-300 font-bold mb-1">{event.day} • {event.time}</div>
+              <div className="text-lg">{event.title}</div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+
+  const renderRemindersWidget = () => (
+    <div key="reminders" className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col h-full">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold text-orange-400 flex items-center gap-2">
+          <AlertCircle /> Today
+        </h2>
+        <span className="text-sm font-bold text-gray-500 uppercase tracking-widest">{DAYS_OF_WEEK[todayDayIndex]}</span>
+      </div>
+      
+      {appSettings.zipCode && <div className="mb-6"><WeatherRing weather={weather} /></div>}
+      
+      <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+        {activeReminders.length === 0 ? (
+          <div className="text-gray-500 italic p-4 text-center">No reminders scheduled for today.</div>
+        ) : (
+          activeReminders.map((reminder, i) => (
+            <div key={i} className="flex items-start gap-3 bg-gray-800 p-4 rounded-xl">
+              <div className={`w-3 h-3 rounded-full ${reminder.color} mt-1.5 flex-shrink-0`}></div>
               <div>
                 <span className="text-xs font-bold text-gray-500 block mb-0.5">{reminder.kidName}</span>
                 <span className="text-lg leading-snug text-gray-200">{reminder.text}</span>
@@ -587,7 +999,21 @@ export default function App() {
               <div className="grid grid-cols-2 gap-y-3 gap-x-2 place-content-center mb-4">
                 {kids.map(kid => (
                    <SmallProgressRing 
-                     key={`d-${kid.id}`} progress={calculateKidProgress(kid.id, 'daily')} kidName={kid.name} colorClass={kid.headerColor} onClick={(e) => { e.stopPropagation(); setPinModal({ isOpen: true, kidId: kid.id }); setEnteredPin(''); setPinError(false); }} /> ))} </div> <div className="px-2"> <div className="flex justify-between text-xs mb-2"> <span className="font-bold text-gray-400 uppercase tracking-wide">Family Daily</span> <span className="font-bold text-white">{dailyOverall}\%</span> </div> <div className="w-full bg-gray-800 rounded-full h-2.5 border border-gray-700 overflow-hidden"> <div className="bg-green-500 h-full transition-all duration-1000 ease-out" style={{ width: `${dailyOverall}%` }}></div>
+                     key={`d-${kid.id}`} 
+                     progress={calculateKidProgress(kid.id, 'daily')} 
+                     kidName={kid.name} 
+                     colorClass={kid.headerColor}
+                     onClick={(e) => { e.stopPropagation(); setPinModal({ isOpen: true, kidId: kid.id }); setEnteredPin(''); setPinError(false); }}
+                   />
+                ))}
+              </div>
+              <div className="px-2">
+                <div className="flex justify-between text-xs mb-2">
+                  <span className="font-bold text-gray-400 uppercase tracking-wide">Family Daily</span>
+                  <span className="font-bold text-white">{dailyOverall}%</span>
+                </div>
+                <div className="w-full bg-gray-800 rounded-full h-2.5 border border-gray-700 overflow-hidden">
+                  <div className="bg-green-500 h-full transition-all duration-1000 ease-out" style={{ width: `${dailyOverall}%` }}></div>
                 </div>
               </div>
            </div>
@@ -603,7 +1029,21 @@ export default function App() {
               <div className="grid grid-cols-2 gap-y-3 gap-x-2 place-content-center mb-4">
                 {kids.map(kid => (
                    <SmallProgressRing 
-                     key={`w-${kid.id}`} progress={calculateKidProgress(kid.id, 'weekly')} kidName={kid.name} colorClass={kid.headerColor} onClick={(e) => { e.stopPropagation(); setPinModal({ isOpen: true, kidId: kid.id }); setEnteredPin(''); setPinError(false); }} /> ))} </div> <div className="px-2"> <div className="flex justify-between text-xs mb-2"> <span className="font-bold text-gray-400 uppercase tracking-wide">Family Weekly</span> <span className="font-bold text-white">{weeklyOverall}\%</span> </div> <div className="w-full bg-gray-800 rounded-full h-2.5 border border-gray-700 overflow-hidden"> <div className="bg-purple-500 h-full transition-all duration-1000 ease-out" style={{ width: `${weeklyOverall}%` }}></div>
+                     key={`w-${kid.id}`} 
+                     progress={calculateKidProgress(kid.id, 'weekly')} 
+                     kidName={kid.name} 
+                     colorClass={kid.headerColor}
+                     onClick={(e) => { e.stopPropagation(); setPinModal({ isOpen: true, kidId: kid.id }); setEnteredPin(''); setPinError(false); }}
+                   />
+                ))}
+              </div>
+              <div className="px-2">
+                <div className="flex justify-between text-xs mb-2">
+                  <span className="font-bold text-gray-400 uppercase tracking-wide">Family Weekly</span>
+                  <span className="font-bold text-white">{weeklyOverall}%</span>
+                </div>
+                <div className="w-full bg-gray-800 rounded-full h-2.5 border border-gray-700 overflow-hidden">
+                  <div className="bg-purple-500 h-full transition-all duration-1000 ease-out" style={{ width: `${weeklyOverall}%` }}></div>
                 </div>
               </div>
            </div>
@@ -692,12 +1132,36 @@ export default function App() {
                           className={`p-4 rounded-2xl flex items-center justify-between transition-all cursor-pointer border-2 ${isDone ? 'bg-gray-800 opacity-60 border-gray-700' : 'bg-gray-800 hover:bg-gray-750 border-gray-600 hover:border-gray-500'}`}
                         >
                           <span className={`text-xl font-semibold ${isDone ? 'line-through text-gray-500' : 'text-gray-100'}`}>{chore.text}</span>
-                          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-colors ${isDone ? 'border-green-500 bg-green-500 text-gray-900' : 'border-gray-500'}`}> {isDone && <CheckCircle size={18} strokeWidth={2.5} />} </div> </div> ); })} </div> </div>  {/* Weekly Chores */} <div> <h3 className="text-lg font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2"> <ListTodo className="text-purple-500" /> Weekly Deep Clean </h3> <div className="space-y-3"> {kidWeekly.length === 0 && <div className="text-gray-600 italic text-base">No weekly chores assigned.</div>} {kidWeekly.map(chore => { const isDone = chore.completedBy.includes(kid.id);  const coAssigneeIds = chore.assigneeIds.filter(id => id !== kid.id); const coAssigneeNames = coAssigneeIds.map(id => kids.find(k => k.id === id)?.name).filter(Boolean);  let withText = ""; if (coAssigneeNames.length === 1) { withText = `with ${coAssigneeNames[0]}`;
+                          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-colors ${isDone ? 'border-green-500 bg-green-500 text-gray-900' : 'border-gray-500'}`}>
+                            {isDone && <CheckCircle size={18} strokeWidth={2.5} />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Weekly Chores */}
+                <div>
+                  <h3 className="text-lg font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <ListTodo className="text-purple-500" /> Weekly Deep Clean
+                  </h3>
+                  <div className="space-y-3">
+                    {kidWeekly.length === 0 && <div className="text-gray-600 italic text-base">No weekly chores assigned.</div>}
+                    {kidWeekly.map(chore => {
+                      const isDone = chore.completedBy.includes(kid.id);
+                      
+                      const coAssigneeIds = chore.assigneeIds.filter(id => id !== kid.id);
+                      const coAssigneeNames = coAssigneeIds.map(id => kids.find(k => k.id === id)?.name).filter(Boolean);
+                      
+                      let withText = "";
+                      if (coAssigneeNames.length === 1) {
+                        withText = `with ${coAssigneeNames[0]}`;
                       } else if (coAssigneeNames.length === 2) {
-                        withText = `with ${coAssigneeNames[0]} &${coAssigneeNames[1]}`;
+                        withText = `with ${coAssigneeNames[0]} & ${coAssigneeNames[1]}`;
                       } else if (coAssigneeNames.length > 2) {
                         const last = coAssigneeNames.pop();
-                        withText = `with ${coAssigneeNames.join(', ')}, &${last}`;
+                        withText = `with ${coAssigneeNames.join(', ')}, & ${last}`;
                       }
 
                       return (
@@ -880,179 +1344,4 @@ export default function App() {
                             ))}
                             <div className="w-px h-6 bg-gray-700 mx-2"></div>
                             <button onClick={() => toggleGlobalReminderAMPM(reminder.id, 'AM')} className={`px-2 py-1 rounded text-xs font-bold transition-colors ${reminder.showAM ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>AM</button>
-                            <button onClick={() => toggleGlobalReminderAMPM(reminder.id, 'PM')} className={`px-2 py-1 rounded text-xs font-bold transition-colors ${reminder.showPM ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>PM</button> </div> <button onClick={() => handleRemoveGlobalReminder(reminder.id)} className="text-red-400 hover:text-red-300 p-2 bg-gray-800 hover:bg-red-900/30 rounded-lg transition-colors flex-shrink-0"> <X size={18} /> </button> </div> </div> ))} </div>  <div className="flex flex-col md:flex-row gap-3 bg-gray-900 p-4 rounded-xl border border-gray-700"> <input type="text" placeholder="e.g. Put out the recycling bins" value={newGlobalReminder} onChange={e => setNewGlobalReminder(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddGlobalReminder()} className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-indigo-500" /> <button onClick={handleAddGlobalReminder} className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors"> <Plus size={20}/> Add Reminder </button> </div> </div>  </div> )}  {/* TAB: KIDS */} {adminTab === 'kids' && ( <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700"> <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Users className="text-green-400" /> Profiles & Routines</h3> <p className="text-gray-400 text-sm mb-6">Manage names, PIN codes, personal daily routines, and scheduled reminders.</p> <div className="grid grid-cols-1 gap-4"> {kids.map(kid => ( <div key={kid.id} className="bg-gray-900 p-4 rounded-xl border border-gray-700 flex justify-between items-center"> <div> <span className={`font-bold ${kid.headerColor} text-lg`}>{kid.name}</span>
-                        <span className="text-gray-500 text-sm ml-3 border-l border-gray-700 pl-3">PIN: {kid.pin}</span>
-                        <div className="text-sm text-gray-500 mt-1">{kid.routines.length} Routines | {kid.reminders.length} Scheduled Reminders</div>
-                      </div>
-                      <button onClick={() => setEditingKid(kid)} className="bg-gray-800 hover:bg-gray-700 text-blue-400 p-3 rounded-lg transition-colors flex items-center gap-2">
-                        <Edit3 size={18} /> Edit Setup
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* TAB: LAYOUT */}
-            {adminTab === 'layout' && (
-              <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
-                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><LayoutDashboard className="text-blue-400" /> Dashboard Layout</h3>
-                 <p className="text-gray-400 text-sm mb-6">Change the order in which widgets appear on the main dashboard screen.</p>
-                 <div className="space-y-3 max-w-lg">
-                    {appSettings.dashboardLayout.map((widgetId, idx) => (
-                      <div key={widgetId} className="flex items-center justify-between bg-gray-900 p-4 rounded-xl border border-gray-700">
-                        <span className="text-lg font-bold text-gray-200">{WIDGET_TITLES[widgetId] || widgetId}</span>
-                        <div className="flex gap-2">
-                          <button 
-                             onClick={() => moveWidget(idx, -1)} 
-                             disabled={idx === 0}
-                             className="p-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-colors"
-                          >
-                             <ChevronUp size={20}/>
-                          </button>
-                          <button 
-                             onClick={() => moveWidget(idx, 1)} 
-                             disabled={idx === appSettings.dashboardLayout.length - 1}
-                             className="p-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-colors"
-                          >
-                             <ChevronDown size={20}/>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                 </div>
-              </div>
-            )}
-
-            {/* TAB: SETTINGS */}
-            {adminTab === 'settings' && (
-              <div className="space-y-6">
-                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
-                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><RotateCcw className="text-orange-400" /> System Resets</h3>
-                  <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
-                    <div className="flex items-center justify-between bg-gray-900 p-4 rounded-xl border border-gray-700 w-full md:w-1/2">
-                      <div>
-                        <span className="font-bold text-white block">Auto-Reset Dailies</span>
-                        <span className="text-gray-500 text-sm">Uncheck all daily chores at midnight</span>
-                      </div>
-                      <button 
-                        onClick={toggleAutoReset}
-                        className={`w-14 h-8 rounded-full transition-colors relative ${appSettings.autoResetDailies ? 'bg-green-500' : 'bg-gray-600'}`}
-                      >
-                        <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-transform ${appSettings.autoResetDailies ? 'translate-x-7' : 'translate-x-1'}`} /> </button> </div> <button onClick={handleResetDailies} className="bg-gray-900 hover:bg-gray-700 border border-gray-700 text-orange-400 px-6 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors w-full md:w-auto justify-center"> <RotateCcw size={20} /> Force Reset Dailies Now </button> </div> </div>  <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700"> <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><CloudSun className="text-blue-400" /> Weather Settings</h3> <div className="flex flex-col md:flex-row gap-6 items-start md:items-center"> <div className="w-full md:w-2/3"> <label className="block text-sm font-bold text-gray-400 mb-2">Location (City Name)</label> <div className="flex gap-3"> <input type="text" placeholder="e.g. Seattle or London" value={weatherInput} onChange={(e) => setWeatherInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSaveWeatherSetting()} className="flex-1 bg-gray-900 border border-gray-700 rounded-xl p-4 text-white focus:outline-none focus:border-blue-500" /> <button onClick={handleSaveWeatherSetting} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-bold transition-colors"> Save </button> </div> {weatherStatus && <p className={`text-sm mt-3 font-bold ${weatherStatus.includes('Found') ? 'text-green-400' : 'text-orange-400'}`}>{weatherStatus}</p>}
-                        {!weatherStatus && <p className="text-gray-500 text-sm mt-2">Open-Meteo's free API requires a city name for best results. Clear and save to disable.</p>}
-                     </div>
-                  </div>
-                </div>
-
-                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
-                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Calendar className="text-purple-400" /> Google Calendar Sync</h3>
-                  <p className="text-gray-400 text-sm mb-4">In Google Calendar Settings, scroll down to "Integrate calendar" and copy the <strong>Public address in iCal format</strong>.</p>
-                  <div className="space-y-4 max-w-2xl">
-                     <div>
-                        <input 
-                           type="text" 
-                           placeholder="https://calendar.google.com/calendar/ical/.../public/basic.ics"
-                           value={icalInput}
-                           onChange={(e) => setIcalInput(e.target.value)}
-                           onBlur={handleSaveCalendarSettings}
-                           onKeyDown={(e) => e.key === 'Enter' && handleSaveCalendarSettings()}
-                           className="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
-                        />
-                     </div>
-                     <div className="flex items-center gap-4 pt-2">
-                       <button onClick={handleSaveCalendarSettings} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-bold transition-colors">
-                         Sync Calendar
-                       </button>
-                       {calendarStatus && <span className={`text-sm font-bold ${calendarStatus.includes('✅') ? 'text-green-400' : calendarStatus.includes('❌') ? 'text-red-400' : 'text-gray-400'}`}>{calendarStatus}</span>}
-                     </div>
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: EDIT KID */}
-      {editingKid && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-3xl shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh]">
-            
-            <div className="p-6 border-b border-gray-800 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Edit3 className="text-blue-400"/> Edit {editingKid.name}</h2>
-              <button onClick={() => setEditingKid(null)} className="text-gray-400 hover:text-white"><X size={24} /></button>
-            </div>
-
-            <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              {/* Profile Settings */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-400 mb-2">Display Name</label>
-                  <input 
-                    type="text" value={editingKid.name} 
-                    onChange={e => setEditingKid({...editingKid, name: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-400 mb-2">4-Digit Verification PIN</label>
-                  <input 
-                    type="text" maxLength={4} value={editingKid.pin} 
-                    onChange={e => setEditingKid({...editingKid, pin: e.target.value.replace(/[^0-9]/g, '')})}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Routines Editor */}
-              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-                <h3 className="font-bold text-white mb-1 flex items-center gap-2">Personal Routines</h3>
-                <p className="text-gray-400 text-sm mb-4">Static items that appear at the bottom of their card.</p>
-                <div className="space-y-2 mb-4">
-                  {editingKid.routines.length === 0 && <span className="text-gray-500 italic text-sm">No routines set.</span>}
-                  {editingKid.routines.map((routine, idx) => (
-                    <div key={idx} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700">
-                      <span className="text-gray-200">{routine}</span>
-                      <button onClick={() => handleRemoveItem('routines', idx)} className="text-red-400 hover:text-red-300 p-1"><X size={18} /></button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" placeholder="e.g. Pack Lunchbox" value={newItemText.routine}
-                    onChange={e => setNewItemText({...newItemText, routine: e.target.value})}
-                    onKeyDown={e => e.key === 'Enter' && handleAddRoutine()}
-                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-blue-500"
-                  />
-                  <button onClick={handleAddRoutine} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold flex items-center"><Plus size={20}/></button>
-                </div>
-              </div>
-
-              {/* Reminders Editor */}
-              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-                <h3 className="font-bold text-white mb-1 flex items-center gap-2">Scheduled Reminders</h3>
-                <p className="text-gray-400 text-sm mb-4">Select the days and times these should appear on the main Dashboard.</p>
-                <div className="space-y-3 mb-4">
-                  {editingKid.reminders.length === 0 && <span className="text-gray-500 italic text-sm">No reminders set.</span>}
-                  {editingKid.reminders.map((reminder) => (
-                    <div key={reminder.id} className="bg-gray-900 p-3 rounded-lg border border-gray-700 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-                      <span className="text-gray-200 font-semibold">{reminder.text}</span>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <div className="flex gap-1">
-                          {DAYS_OF_WEEK.map((day, idx) => (
-                            <button 
-                              key={idx}
-                              onClick={() => toggleReminderDay(reminder.id, idx)}
-                              className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${reminder.days.includes(idx) ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-                            >
-                              {day}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="w-px h-6 bg-gray-700 mx-1"></div>
-                        <div className="flex gap-1.5">
-                          <button onClick={() => toggleReminderAMPM(reminder.id, 'AM')} className={`px-2.5 py-1.5 rounded text-xs font-bold transition-colors ${reminder.showAM ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>AM</button>
-                          <button onClick={() => toggleReminderAMPM(reminder.id, 'PM')} className={`px-2.5 py-1.5 rounded text-xs font-bold transition-colors
+                            <button onClick={() => toggleGlobalReminderAMPM(reminder.id, '
