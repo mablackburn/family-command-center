@@ -1344,4 +1344,313 @@ export default function App() {
                             ))}
                             <div className="w-px h-6 bg-gray-700 mx-2"></div>
                             <button onClick={() => toggleGlobalReminderAMPM(reminder.id, 'AM')} className={`px-2 py-1 rounded text-xs font-bold transition-colors ${reminder.showAM ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>AM</button>
-                            <button onClick={() => toggleGlobalReminderAMPM(reminder.id, '
+                            <button onClick={() => toggleGlobalReminderAMPM(reminder.id, 'PM')} className={`px-2 py-1 rounded text-xs font-bold transition-colors ${reminder.showPM ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>PM</button>
+                          </div>
+                          <button onClick={() => handleRemoveGlobalReminder(reminder.id)} className="text-red-400 hover:text-red-300 p-2 bg-gray-800 hover:bg-red-900/30 rounded-lg transition-colors flex-shrink-0">
+                            <X size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-3 bg-gray-900 p-4 rounded-xl border border-gray-700">
+                    <input 
+                      type="text" placeholder="e.g. Put out the recycling bins" value={newGlobalReminder}
+                      onChange={e => setNewGlobalReminder(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleAddGlobalReminder()}
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <button onClick={handleAddGlobalReminder} className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors">
+                      <Plus size={20}/> Add Reminder
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* TAB: KIDS */}
+            {adminTab === 'kids' && (
+              <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Users className="text-green-400" /> Profiles & Routines</h3>
+                <p className="text-gray-400 text-sm mb-6">Manage names, PIN codes, personal daily routines, and scheduled reminders.</p>
+                <div className="grid grid-cols-1 gap-4">
+                  {kids.map(kid => (
+                    <div key={kid.id} className="bg-gray-900 p-4 rounded-xl border border-gray-700 flex justify-between items-center">
+                      <div>
+                        <span className={`font-bold ${kid.headerColor} text-lg`}>{kid.name}</span>
+                        <span className="text-gray-500 text-sm ml-3 border-l border-gray-700 pl-3">PIN: {kid.pin}</span>
+                        <div className="text-sm text-gray-500 mt-1">{kid.routines.length} Routines | {kid.reminders.length} Scheduled Reminders</div>
+                      </div>
+                      <button onClick={() => setEditingKid(kid)} className="bg-gray-800 hover:bg-gray-700 text-blue-400 p-3 rounded-lg transition-colors flex items-center gap-2">
+                        <Edit3 size={18} /> Edit Setup
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: LAYOUT */}
+            {adminTab === 'layout' && (
+              <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><LayoutDashboard className="text-blue-400" /> Dashboard Layout</h3>
+                 <p className="text-gray-400 text-sm mb-6">Change the order in which widgets appear on the main dashboard screen.</p>
+                 <div className="space-y-3 max-w-lg">
+                    {appSettings.dashboardLayout.map((widgetId, idx) => (
+                      <div key={widgetId} className="flex items-center justify-between bg-gray-900 p-4 rounded-xl border border-gray-700">
+                        <span className="text-lg font-bold text-gray-200">{WIDGET_TITLES[widgetId] || widgetId}</span>
+                        <div className="flex gap-2">
+                          <button 
+                             onClick={() => moveWidget(idx, -1)} 
+                             disabled={idx === 0}
+                             className="p-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-colors"
+                          >
+                             <ChevronUp size={20}/>
+                          </button>
+                          <button 
+                             onClick={() => moveWidget(idx, 1)} 
+                             disabled={idx === appSettings.dashboardLayout.length - 1}
+                             className="p-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-colors"
+                          >
+                             <ChevronDown size={20}/>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                 </div>
+              </div>
+            )}
+
+            {/* TAB: SETTINGS */}
+            {adminTab === 'settings' && (
+              <div className="space-y-6">
+                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><RotateCcw className="text-orange-400" /> System Resets</h3>
+                  <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
+                    <div className="flex items-center justify-between bg-gray-900 p-4 rounded-xl border border-gray-700 w-full md:w-1/2">
+                      <div>
+                        <span className="font-bold text-white block">Auto-Reset Dailies</span>
+                        <span className="text-gray-500 text-sm">Uncheck all daily chores at midnight</span>
+                      </div>
+                      <button 
+                        onClick={toggleAutoReset}
+                        className={`w-14 h-8 rounded-full transition-colors relative ${appSettings.autoResetDailies ? 'bg-green-500' : 'bg-gray-600'}`}
+                      >
+                        <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-transform ${appSettings.autoResetDailies ? 'translate-x-7' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+                    <button onClick={handleResetDailies} className="bg-gray-900 hover:bg-gray-700 border border-gray-700 text-orange-400 px-6 py-4 rounded-xl font-bold flex items-center gap-2 transition-colors w-full md:w-auto justify-center">
+                      <RotateCcw size={20} /> Force Reset Dailies Now
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><CloudSun className="text-blue-400" /> Weather Settings</h3>
+                  <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
+                     <div className="w-full md:w-2/3">
+                        <label className="block text-sm font-bold text-gray-400 mb-2">Location (City Name)</label>
+                        <div className="flex gap-3">
+                          <input 
+                             type="text" 
+                             placeholder="e.g. Seattle or London" 
+                             value={weatherInput}
+                             onChange={(e) => setWeatherInput(e.target.value)}
+                             onKeyDown={(e) => e.key === 'Enter' && handleSaveWeatherSetting()}
+                             className="flex-1 bg-gray-900 border border-gray-700 rounded-xl p-4 text-white focus:outline-none focus:border-blue-500"
+                          />
+                          <button onClick={handleSaveWeatherSetting} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-bold transition-colors">
+                            Save
+                          </button>
+                        </div>
+                        {weatherStatus && <p className={`text-sm mt-3 font-bold ${weatherStatus.includes('Found') ? 'text-green-400' : 'text-orange-400'}`}>{weatherStatus}</p>}
+                        {!weatherStatus && <p className="text-gray-500 text-sm mt-2">Open-Meteo's free API requires a city name for best results. Clear and save to disable.</p>}
+                     </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Calendar className="text-purple-400" /> Google Calendar Sync</h3>
+                  <p className="text-gray-400 text-sm mb-4">In Google Calendar Settings, scroll down to "Integrate calendar" and copy the <strong>Public address in iCal format</strong>.</p>
+                  <div className="space-y-4 max-w-2xl">
+                     <div>
+                        <input 
+                           type="text" 
+                           placeholder="https://calendar.google.com/calendar/ical/.../public/basic.ics"
+                           value={icalInput}
+                           onChange={(e) => setIcalInput(e.target.value)}
+                           onBlur={handleSaveCalendarSettings}
+                           onKeyDown={(e) => e.key === 'Enter' && handleSaveCalendarSettings()}
+                           className="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                        />
+                     </div>
+                     <div className="flex items-center gap-4 pt-2">
+                       <button onClick={handleSaveCalendarSettings} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-bold transition-colors">
+                         Sync Calendar
+                       </button>
+                       {calendarStatus && <span className={`text-sm font-bold ${calendarStatus.includes('✅') ? 'text-green-400' : calendarStatus.includes('❌') ? 'text-red-400' : 'text-gray-400'}`}>{calendarStatus}</span>}
+                     </div>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT KID */}
+      {editingKid && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-3xl shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh]">
+            
+            <div className="p-6 border-b border-gray-800 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Edit3 className="text-blue-400"/> Edit {editingKid.name}</h2>
+              <button onClick={() => setEditingKid(null)} className="text-gray-400 hover:text-white"><X size={24} /></button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              {/* Profile Settings */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2">Display Name</label>
+                  <input 
+                    type="text" value={editingKid.name} 
+                    onChange={e => setEditingKid({...editingKid, name: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2">4-Digit Verification PIN</label>
+                  <input 
+                    type="text" maxLength={4} value={editingKid.pin} 
+                    onChange={e => setEditingKid({...editingKid, pin: e.target.value.replace(/[^0-9]/g, '')})}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Routines Editor */}
+              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+                <h3 className="font-bold text-white mb-1 flex items-center gap-2">Personal Routines</h3>
+                <p className="text-gray-400 text-sm mb-4">Static items that appear at the bottom of their card.</p>
+                <div className="space-y-2 mb-4">
+                  {editingKid.routines.length === 0 && <span className="text-gray-500 italic text-sm">No routines set.</span>}
+                  {editingKid.routines.map((routine, idx) => (
+                    <div key={idx} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700">
+                      <span className="text-gray-200">{routine}</span>
+                      <button onClick={() => handleRemoveItem('routines', idx)} className="text-red-400 hover:text-red-300 p-1"><X size={18} /></button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" placeholder="e.g. Pack Lunchbox" value={newItemText.routine}
+                    onChange={e => setNewItemText({...newItemText, routine: e.target.value})}
+                    onKeyDown={e => e.key === 'Enter' && handleAddRoutine()}
+                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                  <button onClick={handleAddRoutine} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold flex items-center"><Plus size={20}/></button>
+                </div>
+              </div>
+
+              {/* Reminders Editor */}
+              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+                <h3 className="font-bold text-white mb-1 flex items-center gap-2">Scheduled Reminders</h3>
+                <p className="text-gray-400 text-sm mb-4">Select the days and times these should appear on the main Dashboard.</p>
+                <div className="space-y-3 mb-4">
+                  {editingKid.reminders.length === 0 && <span className="text-gray-500 italic text-sm">No reminders set.</span>}
+                  {editingKid.reminders.map((reminder) => (
+                    <div key={reminder.id} className="bg-gray-900 p-3 rounded-lg border border-gray-700 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                      <span className="text-gray-200 font-semibold">{reminder.text}</span>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex gap-1">
+                          {DAYS_OF_WEEK.map((day, idx) => (
+                            <button 
+                              key={idx}
+                              onClick={() => toggleReminderDay(reminder.id, idx)}
+                              className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${reminder.days.includes(idx) ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="w-px h-6 bg-gray-700 mx-1"></div>
+                        <div className="flex gap-1.5">
+                          <button onClick={() => toggleReminderAMPM(reminder.id, 'AM')} className={`px-2.5 py-1.5 rounded text-xs font-bold transition-colors ${reminder.showAM ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>AM</button>
+                          <button onClick={() => toggleReminderAMPM(reminder.id, 'PM')} className={`px-2.5 py-1.5 rounded text-xs font-bold transition-colors ${reminder.showPM ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>PM</button>
+                        </div>
+                        <button onClick={() => handleRemoveReminder(reminder.id)} className="text-red-400 hover:text-red-300 p-1.5 ml-2"><X size={18} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" placeholder="e.g. Bring Cello" value={newItemText.reminder}
+                    onChange={e => setNewItemText({...newItemText, reminder: e.target.value})}
+                    onKeyDown={e => e.key === 'Enter' && handleAddReminder()}
+                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                  <button onClick={handleAddReminder} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold flex items-center"><Plus size={20}/></button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-gray-800 bg-gray-900 rounded-b-3xl flex justify-end gap-3">
+              <button onClick={() => setEditingKid(null)} className="px-6 py-3 rounded-xl font-bold text-gray-300 hover:text-white transition-colors">Cancel</button>
+              <button onClick={handleSaveKid} className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-colors"><Save size={20}/> Save Changes</button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* PIN MODAL (Kid Login) */}
+      {pinModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-gray-700 rounded-3xl p-8 shadow-2xl max-w-sm w-full mx-4">
+            <div className="text-center mb-6"><Lock className="mx-auto text-blue-400 mb-2" size={32} /><h2 className="text-2xl font-bold text-white">Enter PIN</h2><p className="text-gray-400 mt-1">{kids.find(k => k.id === pinModal.kidId)?.name}'s Profile</p></div>
+            <div className={`flex justify-center gap-4 mb-8 ${pinError ? 'animate-bounce' : ''}`}>
+              {[0, 1, 2, 3].map(i => (<div key={i} className={`w-4 h-4 rounded-full transition-all ${i < enteredPin.length ? 'bg-blue-500 scale-110' : 'bg-gray-700'} ${pinError ? 'bg-red-500' : ''}`} />))}
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (<button key={num} onClick={() => handlePinPadClick(num.toString())} className="bg-gray-800 hover:bg-gray-700 text-2xl font-bold text-white py-4 rounded-2xl transition-colors active:scale-95">{num}</button>))}
+              <div className="col-span-1"></div>
+              <button onClick={() => handlePinPadClick('0')} className="bg-gray-800 hover:bg-gray-700 text-2xl font-bold text-white py-4 rounded-2xl transition-colors active:scale-95">0</button>
+              <button onClick={() => setPinModal({ isOpen: false, kidId: null })} className="text-gray-400 hover:text-white font-semibold py-4 transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* ADMIN ACTION PIN MODAL (For resetting chores from the dashboard) */}
+      {adminActionModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-gray-700 rounded-3xl p-8 shadow-2xl max-w-sm w-full mx-4">
+            <div className="text-center mb-6">
+              <RotateCcw className="mx-auto text-orange-400 mb-2" size={32} />
+              <h2 className="text-2xl font-bold text-white">Verify Admin PIN</h2>
+              <p className="text-gray-400 mt-1">Reset {adminActionModal === 'reset-daily' ? 'Daily' : 'Weekly'} Chores</p>
+            </div>
+            <div className={`flex justify-center gap-4 mb-8 ${adminPinError ? 'animate-bounce' : ''}`}>
+              {[0, 1, 2, 3, 4, 5].map(i => (<div key={i} className={`w-4 h-4 rounded-full transition-all ${i < enteredAdminPin.length ? 'bg-orange-500 scale-110' : 'bg-gray-700'} ${adminPinError ? 'bg-red-500' : ''}`} />))}
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (<button key={num} onClick={() => handleAdminActionPinPadClick(num.toString())} className="bg-gray-800 hover:bg-gray-700 text-2xl font-bold text-white py-4 rounded-2xl transition-colors active:scale-95">{num}</button>))}
+              <div className="col-span-1"></div>
+              <button onClick={() => handleAdminActionPinPadClick('0')} className="bg-gray-800 hover:bg-gray-700 text-2xl font-bold text-white py-4 rounded-2xl transition-colors active:scale-95">0</button>
+              <button onClick={() => { setAdminActionModal(null); setEnteredAdminPin(''); setAdminPinError(false); }} className="text-gray-400 hover:text-white font-semibold py-4 transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
