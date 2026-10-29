@@ -132,7 +132,7 @@ const initialGlobalReminders: Reminder[] = [
 // --- ICAL PARSER HELPER ---
 const fetchIcalData = async (url: string) => {
   try {
-    // This now hits your new Vercel /api/calendar.js route
+    // Hits your new Vercel /api/calendar.js route
     const res = await fetch(`/api/calendar?url=${encodeURIComponent(url)}`);
     if (res.ok) {
       const text = await res.text();
@@ -194,7 +194,8 @@ const parseICS = (icsString: string) => {
   }
 
   const realNow = new Date();
-  const nextWeek = new Date(realNow.getTime() + 7 * 24 * 60 * 60 * 1000);
+  // Expanded horizon to search 180 days (6 months) into the future
+  const horizon = new Date(realNow.getTime() + 180 * 24 * 60 * 60 * 1000); 
   const expandedEvents: any[] = [];
   const dayMap: Record<string, number> = { 'SU': 0, 'MO': 1, 'TU': 2, 'WE': 3, 'TH': 4, 'FR': 5, 'SA': 6 };
 
@@ -203,7 +204,7 @@ const parseICS = (icsString: string) => {
 
      if (!ev.rrule) {
         const evEnd = new Date(ev.start.getTime() + duration);
-        if (evEnd > realNow && ev.start <= nextWeek) expandedEvents.push(ev);
+        if (evEnd > realNow && ev.start <= horizon) expandedEvents.push(ev);
         return;
      }
 
@@ -213,7 +214,7 @@ const parseICS = (icsString: string) => {
            const daysDiff = Math.floor((realNow.getTime() - d.getTime()) / (24*60*60*1000));
            d.setDate(d.getDate() + daysDiff);
         }
-        while (d <= nextWeek) {
+        while (d <= horizon) {
             const recEnd = new Date(d.getTime() + duration);
             if (recEnd > realNow) expandedEvents.push({ ...ev, start: new Date(d) });
             d.setDate(d.getDate() + 1);
@@ -228,7 +229,7 @@ const parseICS = (icsString: string) => {
                  const daysDiff = Math.floor((realNow.getTime() - d.getTime()) / (24*60*60*1000));
                  d.setDate(d.getDate() + Math.max(0, daysDiff - 7));
              }
-             while (d <= nextWeek) {
+             while (d <= horizon) {
                 if (days.includes(d.getDay())) {
                    const recEnd = new Date(d.getTime() + duration);
                    if (recEnd > realNow) expandedEvents.push({ ...ev, start: new Date(d) });
@@ -238,7 +239,7 @@ const parseICS = (icsString: string) => {
            }
         } else {
            let d = new Date(ev.start);
-           while (d <= nextWeek) {
+           while (d <= horizon) {
               const recEnd = new Date(d.getTime() + duration);
               if (recEnd > realNow && d >= new Date(realNow.getTime() - 7*24*60*60*1000)) expandedEvents.push({ ...ev, start: new Date(d) });
               d.setDate(d.getDate() + 7);
@@ -246,7 +247,7 @@ const parseICS = (icsString: string) => {
         }
      } else if (ev.rrule.includes('FREQ=MONTHLY')) {
         let d = new Date(ev.start);
-        while (d <= nextWeek) {
+        while (d <= horizon) {
            const recEnd = new Date(d.getTime() + duration);
            if (recEnd > realNow && d >= new Date(realNow.getTime() - 31*24*60*60*1000)) expandedEvents.push({ ...ev, start: new Date(d) });
            d.setMonth(d.getMonth() + 1);
@@ -256,17 +257,26 @@ const parseICS = (icsString: string) => {
 
   const finalEvents = expandedEvents.filter(ev => {
      const evEnd = new Date(ev.start.getTime() + (ev.end ? ev.end.getTime() - ev.start.getTime() : (ev.isAllDay ? 24*60*60*1000 : 60*60*1000)));
-     return evEnd > realNow && ev.start <= nextWeek;
+     return evEnd > realNow && ev.start <= horizon;
   });
 
   finalEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
   
-  return finalEvents.slice(0, 8).map(ev => {
-     let day = DAYS_OF_WEEK[ev.start.getDay()];
+  // Slice strictly to 5 events
+  return finalEvents.slice(0, 5).map(ev => {
+     let day = '';
      if (ev.start.toDateString() === realNow.toDateString()) {
         day = 'Today';
      } else if (ev.start.toDateString() === new Date(realNow.getTime() + 24*60*60*1000).toDateString()) {
         day = 'Tmw';
+     } else {
+        const daysAway = (ev.start.getTime() - realNow.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysAway < 6) {
+           day = DAYS_OF_WEEK[ev.start.getDay()]; // e.g. Mon, Tue
+        } else {
+           // Display date for events further out (e.g. Oct 24)
+           day = ev.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
      }
      const time = ev.isAllDay ? 'All Day' : ev.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
      return { day, time, title: ev.title };
@@ -1116,7 +1126,7 @@ export default function App() {
   const renderCalendarWidget = () => (
     <div key="calendar" className="bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col h-full">
       <h2 className="text-xl font-semibold text-blue-400 flex items-center gap-2 mb-6">
-        <Calendar /> This Week
+        <Calendar /> Upcoming Events
       </h2>
       <div className="flex-1 overflow-y-auto space-y-4 pr-2">
         {calendarEvents.length === 0 ? (
